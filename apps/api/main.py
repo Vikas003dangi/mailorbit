@@ -72,7 +72,7 @@ def get_health():
     )
 
 
-@app.post("/api/v1/tick", response_model=TickResponse, tags=["Watchdog"])
+@app.api_route("/api/v1/tick", methods=["GET", "POST"], response_model=TickResponse, tags=["Watchdog"])
 def run_tick(
     batch_size: int = Query(10, ge=1, le=100),
     _=Security(verify_tick_secret),
