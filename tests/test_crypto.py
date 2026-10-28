@@ -1,3 +1,4 @@
+import base64
 import pytest
 from cryptography.exceptions import InvalidTag
 from apps.api.config import settings
@@ -31,9 +32,12 @@ def test_tampered_ciphertext_fails():
     secret = "my-secret-key"
     encrypted = service.encrypt(secret)
 
-    # Tamper with ciphertext by altering last character of base64
-    tampered = encrypted[:-2] + ("A" if encrypted[-2] != "A" else "B") + encrypted[-1]
-    with pytest.raises(Exception):
+    # Tamper with the raw payload bytes (flip a bit in the encrypted payload)
+    raw = bytearray(base64.b64decode(encrypted[3:]))
+    raw[15] ^= 0xFF  # Flip byte in ciphertext/tag
+    tampered = "v1:" + base64.b64encode(raw).decode("ascii")
+
+    with pytest.raises(InvalidTag):
         service.decrypt(tampered)
 
 
@@ -42,4 +46,3 @@ def test_mask_secret():
     masked = EncryptionService.mask_secret(secret, visible_suffix_len=5)
     assert masked == "••••••••7f21a"
     assert "orbit" not in masked
-
