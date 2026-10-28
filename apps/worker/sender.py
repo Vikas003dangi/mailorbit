@@ -85,3 +85,4 @@ class LocalMailpitSender:
         except Exception as exc:
             logger.error("Failed to send email to Mailpit (%s:%s): %s", self.host, self.port, exc)
             raise RuntimeError(f"Mailpit delivery failed: {str(exc)}") from exc
+

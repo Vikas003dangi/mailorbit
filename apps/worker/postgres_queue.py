@@ -160,3 +160,4 @@ class PostgresJobQueue(JobQueue):
                 session.commit()
                 return True
             return False
+

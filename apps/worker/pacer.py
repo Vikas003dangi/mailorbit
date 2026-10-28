@@ -26,3 +26,4 @@ class Pacer:
         logger.debug("Pacing dispatch with %.2f second delay", delay)
         time.sleep(delay)
         return delay
+

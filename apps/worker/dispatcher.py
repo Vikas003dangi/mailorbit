@@ -6,13 +6,23 @@ import uuid
 
 from sqlalchemy.orm import Session
 
+from apps.api.config import settings
+from apps.worker.apps_script_relay import (
+    AppsScriptRelayClient,
+    QuotaExceededError,
+    RelayAuthError,
+    RelayError,
+)
 from apps.worker.pacer import Pacer
 from apps.worker.sender import LocalMailpitSender
-from packages.shared.schema import Batch, Contact, Purpose
+from packages.shared.crypto import EncryptionService, EnvKeyManager
+from packages.shared.schema import Batch, Contact, Purpose, SenderRelay
 
 logger = logging.getLogger("mailorbit.dispatcher")
 
 EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$")
+SAFETY_THRESHOLD_RATIO = 0.10  # 10% maximum allowable failure/bounce rate
+MIN_SAMPLES_FOR_SAFETY_CHECK = 5  # Minimum leads evaluated before triggering safety pause
 
 
 def utc_now() -> datetime:
@@ -51,28 +61,77 @@ def render_template(template: Optional[str], contact: Contact, default: str) -> 
     )
 
 
+def resolve_sender_for_batch(
+    session: Session,
+    user_id: uuid.UUID,
+    explicit_sender: Optional[Any] = None,
+) -> Tuple[Any, str, Optional[SenderRelay]]:
+    """
+    Resolves the appropriate email sender for a batch:
+    - If explicit_sender is passed, uses it.
+    - If USE_FAKE_SMTP is True or no active relay is found, uses LocalMailpitSender.
+    - Otherwise decrypts the user's active Google Apps Script relay.
+    """
+    if explicit_sender is not None:
+        return explicit_sender, "outreach@mailorbit.local", None
+
+    relay = (
+        session.query(SenderRelay)
+        .filter(SenderRelay.user_id == user_id, SenderRelay.status == "ACTIVE")
+        .first()
+    )
+
+    if relay and not settings.USE_FAKE_SMTP:
+        try:
+            crypto = EncryptionService(EnvKeyManager(settings.ENCRYPTION_MASTER_KEY))
+            token = crypto.decrypt(relay.auth_token_ciphertext)
+            client = AppsScriptRelayClient(script_url=relay.script_url, auth_token=token)
+            return client, relay.email, relay
+        except Exception as exc:
+            logger.error("Failed to initialize Apps Script relay for user %s: %s", user_id, exc)
+
+    return LocalMailpitSender(), "outreach@mailorbit.local", None
+
+
 def dispatch_batch(
     session: Session,
     batch_id: uuid.UUID,
-    sender: Optional[LocalMailpitSender] = None,
+    sender: Optional[Any] = None,
     pacer: Optional[Pacer] = None,
-    from_email: str = "outreach@mailorbit.local",
+    from_email: Optional[str] = None,
+    min_samples_for_safety: int = MIN_SAMPLES_FOR_SAFETY_CHECK,
 ) -> Dict[str, Any]:
     """
     Executes an outreach batch:
+    - Resolves sender (Apps Script Relay or Mailpit).
+    - Checks remaining daily quota on relay.
     - Pre-send verifies each lead.
-    - If verification fails: immediately marks lead INACTIVE and auto-tops up the batch
-      from pending unassigned contacts for that purpose.
+    - If verification fails: immediately marks lead INACTIVE and auto-tops up the batch.
+    - Evaluates 10% Batch Safety Pause circuit breaker to protect sender domain reputation.
     - Paces dispatches with randomized human-like delay.
-    - Dispatches to Mailpit SMTP.
-    - Marks contacts as SENT and updates batch progress.
+    - Dispatches email and updates contact + batch status.
     """
     batch = session.query(Batch).filter(Batch.id == batch_id).first()
     if not batch:
         return {"status": "ERROR", "message": f"Batch {batch_id} not found"}
 
-    sender = sender or LocalMailpitSender()
-    pacer = pacer or Pacer(min_seconds=0.0, max_seconds=0.0)  # default 0 delay unless specified
+    sender_client, default_from, relay = resolve_sender_for_batch(session, batch.user_id, sender)
+    effective_from = from_email or default_from
+    pacer = pacer or Pacer(min_seconds=0.0, max_seconds=0.0)
+
+    # Check relay quota before starting
+    if relay and relay.remaining_quota is not None and relay.remaining_quota <= 0:
+        relay.status = "QUOTA_EXCEEDED"
+        batch.status = "PAUSED"
+        batch.paused_reason = "Daily Gmail sending quota exhausted on sender relay"
+        session.commit()
+        return {
+            "batch_id": str(batch.id),
+            "batch_name": batch.name,
+            "status": "PAUSED",
+            "paused_reason": batch.paused_reason,
+            "sent_count": 0,
+        }
 
     purpose = None
     if batch.purpose_id:
@@ -81,7 +140,6 @@ def dispatch_batch(
     subject_tpl = purpose.default_subject_template if purpose else "Quick question regarding {company}"
     body_tpl = purpose.default_body_template if purpose else "Hi {name},\n\nHope this finds you well at {company}."
 
-    # Fetch contacts assigned to this batch that are ready to send
     contacts = (
         session.query(Contact)
         .filter(Contact.batch_id == batch.id, Contact.status.in_(["PENDING", "QUEUED"]))
@@ -92,11 +150,31 @@ def dispatch_batch(
     sent_count = 0
     replaced_count = 0
     failed_count = 0
+    total_evaluated = 0
+    safety_paused = False
 
     queue: List[Contact] = list(contacts)
 
+    def trigger_safety_pause_if_needed() -> bool:
+        nonlocal safety_paused
+        if total_evaluated >= min_samples_for_safety:
+            failure_rate = failed_count / total_evaluated
+            if failure_rate > SAFETY_THRESHOLD_RATIO:
+                safety_paused = True
+                batch.status = "PAUSED"
+                batch.paused_reason = (
+                    f"Safety pause triggered: failure rate {failure_rate * 100:.1f}% "
+                    f"exceeded 10% threshold ({failed_count}/{total_evaluated} leads failed). "
+                    "Paused to protect sender domain reputation."
+                )
+                session.commit()
+                logger.warning("Batch %s paused: %s", batch.name, batch.paused_reason)
+                return True
+        return False
+
     while queue:
         contact = queue.pop(0)
+        total_evaluated += 1
 
         # 1. Pre-send verification
         is_valid, fail_reason = verify_email_domain(contact.email)
@@ -106,6 +184,10 @@ def dispatch_batch(
             contact.status = "INACTIVE"
             contact.status_reason = f"Pre-send verification failed: {fail_reason}"
             session.commit()
+
+            # Check 10% safety pause circuit breaker
+            if trigger_safety_pause_if_needed():
+                break
 
             # 2. Immediate auto-topup replacement
             replacement = (
@@ -142,8 +224,8 @@ def dispatch_batch(
 
         # 5. Dispatch email
         try:
-            sender.send_email(
-                from_email=from_email,
+            send_res = sender_client.send_email(
+                from_email=effective_from,
                 to_email=contact.email,
                 subject=subject,
                 body_text=body_text,
@@ -152,23 +234,63 @@ def dispatch_batch(
             contact.sent_at = utc_now()
             contact.error = None
             sent_count += 1
+
+            # Update relay quota tracking if returned by relay
+            if relay and isinstance(send_res, dict) and "remaining_quota" in send_res:
+                rem = send_res["remaining_quota"]
+                if rem is not None:
+                    relay.remaining_quota = rem
+                    if rem <= 0:
+                        relay.status = "QUOTA_EXCEEDED"
+                        batch.status = "PAUSED"
+                        batch.paused_reason = "Daily Gmail sending quota reached"
+                        session.commit()
+                        break
+
+        except QuotaExceededError:
+            if relay:
+                relay.status = "QUOTA_EXCEEDED"
+                relay.remaining_quota = 0
+            batch.status = "PAUSED"
+            batch.paused_reason = "Daily Gmail sending quota reached"
+            session.commit()
+            break
+
+        except RelayAuthError as auth_err:
+            if relay:
+                relay.status = "ERROR"
+            batch.status = "PAUSED"
+            batch.paused_reason = f"Relay authentication failure: {str(auth_err)}"
+            session.commit()
+            break
+
         except Exception as exc:
+            failed_count += 1
             contact.status = "FAILED"
             contact.error = str(exc)
             logger.error("Failed sending email to %s: %s", contact.email, exc)
 
+            # Check 10% safety pause circuit breaker after delivery failure
+            if trigger_safety_pause_if_needed():
+                break
+
         session.commit()
 
-    # If all contacts in the batch have been processed, complete the batch
-    remaining_pending = (
-        session.query(Contact)
-        .filter(Contact.batch_id == batch.id, Contact.status.in_(["PENDING", "QUEUED"]))
-        .count()
-    )
-    if remaining_pending == 0:
-        batch.status = "COMPLETED"
-        batch.updated_at = utc_now()
-        session.commit()
+        # Check 10% safety pause circuit breaker after evaluating lead
+        if trigger_safety_pause_if_needed():
+            break
+
+    # Complete the batch only if not paused and all contacts in batch are processed
+    if not safety_paused and batch.status != "PAUSED":
+        remaining_pending = (
+            session.query(Contact)
+            .filter(Contact.batch_id == batch.id, Contact.status.in_(["PENDING", "QUEUED"]))
+            .count()
+        )
+        if remaining_pending == 0:
+            batch.status = "COMPLETED"
+            batch.updated_at = utc_now()
+            session.commit()
 
     return {
         "batch_id": str(batch.id),
@@ -177,4 +299,5 @@ def dispatch_batch(
         "replaced_count": replaced_count,
         "failed_count": failed_count,
         "batch_status": batch.status,
+        "paused_reason": getattr(batch, "paused_reason", None),
     }

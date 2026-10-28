@@ -214,3 +214,4 @@ def test_batch_dispatch_endpoint_via_api():
         data = res.json()
         assert data["sent_count"] == 1
         assert data["batch_status"] == "COMPLETED"
+
