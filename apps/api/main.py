@@ -39,8 +39,29 @@ app.include_router(contacts.router)
 app.include_router(attachments.router)
 
 # Initialize in-process worker queue & runner
-queue = InMemoryJobQueue()
+import uuid
+from packages.shared.db import create_db_engine, create_session_factory
+from apps.worker import Job, PostgresJobQueue, WorkerRunner, dispatch_batch
+
+try:
+    db_engine = create_db_engine(settings.DATABASE_URL)
+    session_factory = create_session_factory(db_engine)
+    queue = PostgresJobQueue(session_factory=session_factory)
+except Exception as e:
+    logger.warning("Falling back to InMemoryJobQueue: %s", e)
+    from apps.worker import InMemoryJobQueue
+    queue = InMemoryJobQueue()
+
 worker = WorkerRunner(queue=queue)
+
+
+def handle_send_batch(job: Job):
+    batch_id = uuid.UUID(job.payload["batch_id"])
+    with session_factory() as session:
+        return dispatch_batch(session=session, batch_id=batch_id)
+
+
+worker.register_handler("send_batch", handle_send_batch)
 
 
 def verify_tick_secret(

@@ -154,3 +154,27 @@ def delete_batch(
     db.commit()
     return None
 
+
+@router.post("/{batch_id}/dispatch", response_model=Dict[str, Any])
+def dispatch_single_batch(
+    batch_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Dispatches a batch immediately through the send engine.
+    Applies pre-send lead verification, auto-topup replacement on failure,
+    and dispatches via the active sender relay.
+    """
+    batch = db.query(Batch).filter(
+        Batch.id == batch_id,
+        Batch.user_id == current_user.id,
+    ).first()
+    if not batch:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Batch not found")
+
+    from apps.worker.dispatcher import dispatch_batch
+
+    result = dispatch_batch(session=db, batch_id=batch.id)
+    return result
+
