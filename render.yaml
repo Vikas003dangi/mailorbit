@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: mailorbit-api
+    runtime: python
+    plan: free
+    region: oregon # or ohio/frankfurt/singapore
+    buildCommand: "pip install -r apps/api/requirements.txt"
+    startCommand: "uvicorn apps.api.main:app --host 0.0.0.0 --port $PORT"
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: ENVIRONMENT
+        value: production
+      - key: LOG_LEVEL
+        value: INFO
+      - key: USE_FAKE_SMTP
+        value: "false"
+      - key: CORS_ORIGINS
+        value: '["http://localhost:3000","https://vikas003dangi.github.io"]'
+      - key: DATABASE_URL
+        sync: false
+      - key: ENCRYPTION_MASTER_KEY
+        sync: false
+      - key: TICK_SECRET
+        generateValue: true
