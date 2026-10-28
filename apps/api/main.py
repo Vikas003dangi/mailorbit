@@ -6,7 +6,18 @@ from fastapi.responses import RedirectResponse
 
 from apps.api.config import settings
 from apps.api.diagnostics import run_egress_check
-from apps.api.routers import ai_keys, attachments, auth, batches, contacts, profile, purposes, senders, unsubscribe
+from apps.api.routers import (
+    admin,
+    ai_keys,
+    attachments,
+    auth,
+    batches,
+    contacts,
+    profile,
+    purposes,
+    senders,
+    unsubscribe,
+)
 from apps.worker import InMemoryJobQueue, WorkerRunner
 from packages.shared.models import EgressReport, HealthResponse, TickResponse
 
@@ -23,6 +34,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
+    allow_origin_regex=r"https?://.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -38,6 +50,7 @@ app.include_router(batches.router)
 app.include_router(contacts.router)
 app.include_router(attachments.router)
 app.include_router(unsubscribe.router)
+app.include_router(admin.router)
 
 # Initialize in-process worker queue & runner
 import uuid
@@ -73,13 +86,11 @@ worker.register_handler("send_batch", handle_send_batch)
 
 def verify_tick_secret(
     x_tick_secret: Optional[str] = Header(None, alias="X-Tick-Secret"),
-    secret: Optional[str] = Query(None),
 ) -> None:
-    provided = x_tick_secret or secret
-    if not provided or provided != settings.TICK_SECRET:
+    if not x_tick_secret or x_tick_secret != settings.TICK_SECRET:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or missing tick authentication secret",
+            detail="Invalid or missing X-Tick-Secret header",
         )
 
 
@@ -120,12 +131,13 @@ def run_tick(
         logger.exception("Error during scheduler evaluation in tick: %s", e)
 
     processed = worker.tick(batch_size=batch_size)
+    status_str = "standby" if (batches_queued == 0 and processed == 0) else "ok"
     return TickResponse(
-        status="ok",
+        status=status_str,
         batches_queued=batches_queued,
         jobs_claimed=processed,
         jobs_processed=processed,
-        message=f"Tick queued {batches_queued} batches, processed {processed} jobs",
+        message=f"Tick status: {status_str} (queued {batches_queued} batches, processed {processed} jobs)",
     )
 
 

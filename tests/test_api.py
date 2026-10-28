@@ -26,7 +26,7 @@ def test_tick_endpoint_succeeds_with_secret():
     response = client.post("/api/v1/tick", headers=headers)
     assert response.status_code == 200
     data = response.json()
-    assert data["status"] == "ok"
+    assert data["status"] in ["ok", "standby"]
     assert "jobs_processed" in data
 
 

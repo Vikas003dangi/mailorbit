@@ -166,7 +166,7 @@ def test_api_tick_watchdog_endpoint():
     assert response.status_code == 200
     data = response.json()
 
-    assert data["status"] == "ok"
+    assert data["status"] in ["ok", "standby"]
     assert "batches_queued" in data
     assert "jobs_processed" in data
     assert isinstance(data["batches_queued"], int)

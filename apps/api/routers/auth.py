@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from sqlalchemy.orm import Session
 
 from apps.api.config import settings
-from apps.api.dependencies import get_current_user, get_db
+from apps.api.dependencies import SUPERUSER_EMAILS, get_current_user, get_db
 from packages.shared.auth import (
     create_access_token,
     create_refresh_token,
@@ -24,7 +24,18 @@ class UserOut(BaseModel):
     email: str
     timezone: str
     created_at: datetime
+    is_superuser: bool = False
     model_config = ConfigDict(from_attributes=True)
+
+
+def to_user_out(user: User) -> UserOut:
+    return UserOut(
+        id=user.id,
+        email=user.email,
+        timezone=user.timezone,
+        created_at=user.created_at,
+        is_superuser=user.email.lower() in SUPERUSER_EMAILS,
+    )
 
 
 class TokenResponse(BaseModel):
@@ -80,7 +91,7 @@ def signup(payload: SignupRequest, db: Session = Depends(get_db)):
     return TokenResponse(
         access_token=access_token,
         refresh_token=refresh_token,
-        user=user,
+        user=to_user_out(user),
     )
 
 
@@ -88,10 +99,15 @@ def signup(payload: SignupRequest, db: Session = Depends(get_db)):
 def login(payload: LoginRequest, db: Session = Depends(get_db)):
     """Authenticates user credentials and issues new access and refresh tokens."""
     user = db.query(User).filter(User.email == payload.email.lower(), User.is_active == True).first()
-    if not user or not verify_password(payload.password, user.password_hash):
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Account not found. Please click 'Sign Up' to create your account.",
+        )
+    if not verify_password(payload.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password",
+            detail="Incorrect password. Please try again.",
         )
 
     access_token = create_access_token(str(user.id), user.email, settings.TICK_SECRET)
@@ -100,7 +116,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     return TokenResponse(
         access_token=access_token,
         refresh_token=refresh_token,
-        user=user,
+        user=to_user_out(user),
     )
 
 
@@ -125,11 +141,11 @@ def refresh_token(payload: RefreshRequest, db: Session = Depends(get_db)):
     return TokenResponse(
         access_token=new_access,
         refresh_token=new_refresh,
-        user=user,
+        user=to_user_out(user),
     )
 
 
 @router.get("/me", response_model=UserOut)
 def get_current_user_profile(current_user: User = Depends(get_current_user)):
     """Returns the authenticated user details."""
-    return current_user
+    return to_user_out(current_user)

@@ -77,3 +77,15 @@ def get_current_user(
 
     return user
 
+
+SUPERUSER_EMAILS = {"vikassdangi@gmail.com", "vd19055@gmail.com"}
+
+def require_superuser(current_user: User = Depends(get_current_user)) -> User:
+    """Dependency that ensures the authenticated user has superuser privileges."""
+    if current_user.email.lower() not in SUPERUSER_EMAILS:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Superuser privilege required to access this resource",
+        )
+    return current_user
+
