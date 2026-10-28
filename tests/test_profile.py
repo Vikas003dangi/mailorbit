@@ -46,3 +46,4 @@ def test_profile_read_and_update():
     get_again = client.get("/api/v1/profile", headers=headers)
     assert get_again.status_code == 200
     assert get_again.json()["full_name"] == "Vikas Dangi"
+

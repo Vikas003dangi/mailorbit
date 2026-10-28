@@ -42,3 +42,4 @@ def test_mask_secret():
     masked = EncryptionService.mask_secret(secret, visible_suffix_len=5)
     assert masked == "••••••••7f21a"
     assert "orbit" not in masked
+

@@ -5,9 +5,11 @@ from sqlalchemy import (
     Column,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
@@ -33,6 +35,9 @@ class User(Base):
     profile = relationship("Profile", back_populates="user", uselist=False, cascade="all, delete-orphan")
     sender_relays = relationship("SenderRelay", back_populates="user", cascade="all, delete-orphan")
     ai_keys = relationship("AIKey", back_populates="user", cascade="all, delete-orphan")
+    purposes = relationship("Purpose", back_populates="user", cascade="all, delete-orphan")
+    batches = relationship("Batch", back_populates="user", cascade="all, delete-orphan")
+    contacts = relationship("Contact", back_populates="user", cascade="all, delete-orphan")
 
 
 class Profile(Base):
@@ -85,6 +90,87 @@ class AIKey(Base):
     updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
 
     user = relationship("User", back_populates="ai_keys")
+
+
+class Purpose(Base):
+    """
+    General Outreach Campaign Purpose (e.g. Job Application, Referral Request,
+    Freelance Pitch, Follow-up, Custom). Each purpose maintains its own templates,
+    prompts, and auto-batching parameters.
+    """
+    __tablename__ = "purposes"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(150), nullable=False)
+    description = Column(Text, nullable=True)
+    default_subject_template = Column(String(255), nullable=True)
+    default_body_template = Column(Text, nullable=True)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
+
+    user = relationship("User", back_populates="purposes")
+    batches = relationship("Batch", back_populates="purpose", cascade="all, delete-orphan")
+    contacts = relationship("Contact", back_populates="purpose")
+
+
+class Batch(Base):
+    """
+    Named batch auto-created from scheduling rules (e.g. N per day, at time T on days D).
+    Allows user to rename, adjust size, pause, or view contacts.
+    """
+    __tablename__ = "batches"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    purpose_id = Column(UUID(as_uuid=True), ForeignKey("purposes.id", ondelete="SET NULL"), nullable=True, index=True)
+    name = Column(String(150), nullable=False)
+    size = Column(Integer, default=30, nullable=False)
+    position = Column(Integer, default=1, nullable=False)
+    scheduled_time = Column(String(20), default="10:00", nullable=True)  # e.g. "10:00"
+    scheduled_days = Column(JSONB, default=lambda: ["mon", "tue", "wed", "thu", "fri"], nullable=False)
+    status = Column(String(50), default="PENDING", nullable=False)  # PENDING, ACTIVE, COMPLETED, PAUSED
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
+
+    user = relationship("User", back_populates="batches")
+    purpose = relationship("Purpose", back_populates="batches")
+    contacts = relationship("Contact", back_populates="batch")
+
+
+class Contact(Base):
+    """
+    Lead contact representing a recipient of cold outreach.
+    Supports deduplication, immediate failure detection, and inactive listing.
+    """
+    __tablename__ = "contacts"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    purpose_id = Column(UUID(as_uuid=True), ForeignKey("purposes.id", ondelete="SET NULL"), nullable=True, index=True)
+    batch_id = Column(UUID(as_uuid=True), ForeignKey("batches.id", ondelete="SET NULL"), nullable=True, index=True)
+    email = Column(String(255), nullable=False)
+    name = Column(String(255), nullable=True)
+    company = Column(String(255), nullable=True)
+    role = Column(String(255), nullable=True)
+    custom_pitch = Column(JSONB, default=dict, nullable=False)
+    status = Column(String(50), default="PENDING", nullable=False)  # PENDING, QUEUED, SENT, BOUNCED, INVALID_DOMAIN, INACTIVE, UNSUBSCRIBED
+    status_reason = Column(Text, nullable=True)
+    sent_at = Column(DateTime(timezone=True), nullable=True)
+    error = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
+
+    user = relationship("User", back_populates="contacts")
+    purpose = relationship("Purpose", back_populates="contacts")
+    batch = relationship("Batch", back_populates="contacts")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "email", name="uq_user_contact_email"),
+        Index("ix_contacts_user_status", "user_id", "status"),
+        Index("ix_contacts_user_purpose_status", "user_id", "purpose_id", "status"),
+    )
 
 
 class JobModel(Base):

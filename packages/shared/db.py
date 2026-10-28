@@ -33,3 +33,4 @@ def create_db_engine(db_url: str):
 
 def create_session_factory(engine):
     return sessionmaker(autocommit=False, autoflush=False, bind=engine)
+

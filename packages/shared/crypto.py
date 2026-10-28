@@ -79,3 +79,4 @@ class EncryptionService:
         if len(secret) <= visible_suffix_len:
             return "•" * len(secret)
         return "•" * 8 + secret[-visible_suffix_len:]
+

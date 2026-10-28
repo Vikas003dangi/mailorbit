@@ -6,7 +6,7 @@ from fastapi.responses import RedirectResponse
 
 from apps.api.config import settings
 from apps.api.diagnostics import run_egress_check
-from apps.api.routers import ai_keys, auth, profile, senders
+from apps.api.routers import ai_keys, auth, batches, contacts, profile, purposes, senders
 from apps.worker import InMemoryJobQueue, WorkerRunner
 from packages.shared.models import EgressReport, HealthResponse, TickResponse
 
@@ -33,6 +33,9 @@ app.include_router(auth.router)
 app.include_router(profile.router)
 app.include_router(senders.router)
 app.include_router(ai_keys.router)
+app.include_router(purposes.router)
+app.include_router(batches.router)
+app.include_router(contacts.router)
 
 # Initialize in-process worker queue & runner
 queue = InMemoryJobQueue()
