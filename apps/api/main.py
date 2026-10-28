@@ -41,7 +41,13 @@ app.include_router(attachments.router)
 # Initialize in-process worker queue & runner
 import uuid
 from packages.shared.db import create_db_engine, create_session_factory
-from apps.worker import Job, PostgresJobQueue, WorkerRunner, dispatch_batch
+from apps.worker import (
+    Job,
+    PostgresJobQueue,
+    WorkerRunner,
+    dispatch_batch,
+    evaluate_all_due_batches,
+)
 
 try:
     db_engine = create_db_engine(settings.DATABASE_URL)
@@ -100,14 +106,25 @@ def run_tick(
 ):
     """
     Protected tick endpoint called by cron-job.org / watchdog.
-    Triggers in-process worker processing of due batches and scheduled emails.
+    Triggers:
+    1. Scheduler evaluation: evaluates due scheduled batches across all users based on timezone, days, and send time.
+    2. Worker execution: claims queued jobs from PostgreSQL queue and dispatches them.
     """
+    batches_queued = 0
+    try:
+        with session_factory() as session:
+            sched_result = evaluate_all_due_batches(session=session, queue=queue)
+            batches_queued = sched_result.get("batches_queued", 0)
+    except Exception as e:
+        logger.exception("Error during scheduler evaluation in tick: %s", e)
+
     processed = worker.tick(batch_size=batch_size)
     return TickResponse(
         status="ok",
+        batches_queued=batches_queued,
         jobs_claimed=processed,
         jobs_processed=processed,
-        message=f"Tick processed {processed} jobs",
+        message=f"Tick queued {batches_queued} batches, processed {processed} jobs",
     )
 
 

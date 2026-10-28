@@ -11,6 +11,13 @@ from apps.worker.apps_script_relay import (
     RelayError,
 )
 from apps.worker.dispatcher import dispatch_batch, verify_email_domain
+from apps.worker.scheduler import (
+    evaluate_all_due_batches,
+    evaluate_due_batches_for_user,
+    get_user_local_datetime,
+    is_batch_scheduled_for_today,
+    is_batch_time_reached,
+)
 
 __all__ = [
     "Job",
@@ -26,5 +33,10 @@ __all__ = [
     "Pacer",
     "dispatch_batch",
     "verify_email_domain",
+    "evaluate_all_due_batches",
+    "evaluate_due_batches_for_user",
+    "get_user_local_datetime",
+    "is_batch_scheduled_for_today",
+    "is_batch_time_reached",
 ]
 
