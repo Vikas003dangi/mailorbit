@@ -128,3 +128,4 @@ def delete_purpose(
     db.delete(purpose)
     db.commit()
     return None
+

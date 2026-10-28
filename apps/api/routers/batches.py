@@ -153,3 +153,4 @@ def delete_batch(
     db.delete(batch)
     db.commit()
     return None
+

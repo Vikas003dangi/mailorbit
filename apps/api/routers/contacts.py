@@ -267,3 +267,4 @@ def delete_contact(
     db.delete(contact)
     db.commit()
     return None
+

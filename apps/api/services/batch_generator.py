@@ -73,7 +73,5 @@ def auto_generate_batches(
         created_batches.append(batch)
 
     db.commit()
-    for b in created_batches:
-        db.refresh(b)
-
     return created_batches, total_contacts_assigned
+

@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     LOG_LEVEL: str = "INFO"
     DATABASE_URL: str = "postgresql://mailorbit:mailorbit_dev_password@localhost:5432/mailorbit"
+    DATABASE_URL_UNPOOLED: str | None = None
     ENCRYPTION_MASTER_KEY: str = "k9+F2L6qW4mP0sU8yX1zB7cE3gH5jN9rT2vY4aC6eI8="
     TICK_SECRET: str = "dev-watchdog-tick-secret-change-in-prod"
     USE_FAKE_SMTP: bool = True
@@ -20,7 +21,7 @@ class Settings(BaseSettings):
     ]
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(".env.local", ".env"),
         env_file_encoding="utf-8",
         extra="ignore",
     )

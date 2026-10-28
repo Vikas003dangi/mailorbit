@@ -14,7 +14,8 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 
-db_url = get_db_url(settings.DATABASE_URL)
+raw_url = getattr(settings, "DATABASE_URL_UNPOOLED", None) or settings.DATABASE_URL
+db_url = get_db_url(raw_url)
 
 
 def run_migrations_offline() -> None:

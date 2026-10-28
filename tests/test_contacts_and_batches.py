@@ -151,3 +151,4 @@ def test_bulk_350_contacts_import_and_auto_batching():
     # Verify inactive list is now empty
     inactive_after = client.get("/api/v1/contacts/inactive", headers=headers)
     assert len(inactive_after.json()) == 0
+

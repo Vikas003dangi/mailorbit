@@ -52,3 +52,4 @@ def test_purpose_crud_lifecycle():
     # 5. Verify deleted
     get_res = client.get(f"/api/v1/purposes/{purpose_id}", headers=headers)
     assert get_res.status_code == 404
+

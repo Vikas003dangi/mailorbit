@@ -151,8 +151,6 @@ def process_contact_import(
     if contacts_to_create:
         db.add_all(contacts_to_create)
         db.commit()
-        for c in contacts_to_create:
-            db.refresh(c)
 
     result = ImportResult(
         total_rows=total,

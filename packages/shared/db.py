@@ -1,8 +1,32 @@
 import logging
+import socket
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 logger = logging.getLogger("mailorbit.db")
+
+# Fallback DNS resolution for local environments where ISP DNS blocks/refuses cloud subdomains
+try:
+    import dns.resolver
+    _orig_getaddrinfo = socket.getaddrinfo
+
+    def _safe_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+        try:
+            return _orig_getaddrinfo(host, port, family, type, proto, flags)
+        except Exception:
+            if isinstance(host, str) and ("neon.tech" in host or "onrender.com" in host):
+                try:
+                    res = dns.resolver.Resolver()
+                    res.nameservers = ["8.8.8.8", "1.1.1.1"]
+                    ans = res.resolve(host, "A")
+                    return _orig_getaddrinfo(ans[0].address, port, family, type, proto, flags)
+                except Exception:
+                    pass
+            raise
+
+    socket.getaddrinfo = _safe_getaddrinfo
+except ImportError:
+    pass
 
 Base = declarative_base()
 
