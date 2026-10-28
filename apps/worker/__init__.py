@@ -4,6 +4,7 @@ from apps.worker.postgres_queue import PostgresJobQueue
 from apps.worker.runner import WorkerRunner
 from apps.worker.sender import LocalMailpitSender
 from apps.worker.pacer import Pacer
+from apps.worker.ai_personalizer import GeminiPersonalizer, generate_email_content
 from apps.worker.apps_script_relay import (
     AppsScriptRelayClient,
     QuotaExceededError,
@@ -31,6 +32,8 @@ __all__ = [
     "RelayAuthError",
     "RelayError",
     "Pacer",
+    "GeminiPersonalizer",
+    "generate_email_content",
     "dispatch_batch",
     "verify_email_domain",
     "evaluate_all_due_batches",

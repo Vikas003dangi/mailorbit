@@ -7,6 +7,7 @@ import uuid
 from sqlalchemy.orm import Session
 
 from apps.api.config import settings
+from apps.worker.ai_personalizer import GeminiPersonalizer, generate_email_content
 from apps.worker.apps_script_relay import (
     AppsScriptRelayClient,
     QuotaExceededError,
@@ -16,7 +17,7 @@ from apps.worker.apps_script_relay import (
 from apps.worker.pacer import Pacer
 from apps.worker.sender import LocalMailpitSender
 from packages.shared.crypto import EncryptionService, EnvKeyManager
-from packages.shared.schema import Batch, Contact, Purpose, SenderRelay
+from packages.shared.schema import AIKey, Batch, Contact, Profile, Purpose, SenderRelay
 
 logger = logging.getLogger("mailorbit.dispatcher")
 
@@ -137,8 +138,22 @@ def dispatch_batch(
     if batch.purpose_id:
         purpose = session.query(Purpose).filter(Purpose.id == batch.purpose_id).first()
 
-    subject_tpl = purpose.default_subject_template if purpose else "Quick question regarding {company}"
-    body_tpl = purpose.default_body_template if purpose else "Hi {name},\n\nHope this finds you well at {company}."
+    profile = session.query(Profile).filter(Profile.user_id == batch.user_id).first()
+
+    # Resolve optional Gemini AI personalizer
+    personalizer: Optional[GeminiPersonalizer] = None
+    ai_key = (
+        session.query(AIKey)
+        .filter(AIKey.user_id == batch.user_id, AIKey.status == "ACTIVE")
+        .first()
+    )
+    if ai_key:
+        try:
+            crypto = EncryptionService(EnvKeyManager(settings.ENCRYPTION_MASTER_KEY))
+            plain_ai_key = crypto.decrypt(ai_key.api_key_ciphertext)
+            personalizer = GeminiPersonalizer(api_key=plain_ai_key, model=ai_key.model or "gemini-2.5-flash")
+        except Exception as exc:
+            logger.warning("Failed to initialize AI personalizer for user %s: %s", batch.user_id, exc)
 
     contacts = (
         session.query(Contact)
@@ -218,9 +233,13 @@ def dispatch_batch(
         # 3. Pacing delay
         pacer.pace()
 
-        # 4. Render email content
-        subject = render_template(subject_tpl, contact, f"Introduction for {contact.name}")
-        body_text = render_template(body_tpl, contact, f"Hello {contact.name},\n\nConnecting from MailOrbit.")
+        # 4. Render email content (AI personalization with automatic template fallback)
+        subject, body_text, _ = generate_email_content(
+            contact=contact,
+            purpose=purpose,
+            profile=profile,
+            personalizer=personalizer,
+        )
 
         # 5. Dispatch email
         try:
