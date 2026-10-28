@@ -17,7 +17,12 @@ from apps.worker.apps_script_relay import (
 from apps.worker.pacer import Pacer
 from apps.worker.sender import LocalMailpitSender
 from packages.shared.crypto import EncryptionService, EnvKeyManager
-from packages.shared.schema import AIKey, Batch, Contact, Profile, Purpose, SenderRelay
+from packages.shared.schema import AIKey, Batch, Contact, DoNotContact, Profile, Purpose, SenderRelay
+from packages.shared.unsubscribe import (
+    append_unsubscribe_footer,
+    generate_unsubscribe_headers,
+    generate_unsubscribe_token,
+)
 
 logger = logging.getLogger("mailorbit.dispatcher")
 
@@ -191,6 +196,45 @@ def dispatch_batch(
         contact = queue.pop(0)
         total_evaluated += 1
 
+        # 0. Check Do-Not-Contact registry (Opt-out protection)
+        dnc_entry = (
+            session.query(DoNotContact)
+            .filter(
+                DoNotContact.user_id == batch.user_id,
+                DoNotContact.email == contact.email.lower().strip(),
+            )
+            .first()
+        )
+        if dnc_entry:
+            contact.status = "UNSUBSCRIBED"
+            contact.status_reason = f"Recipient is on Do-Not-Contact list ({dnc_entry.reason})"
+            session.commit()
+
+            # Immediate auto-topup replacement
+            replacement = (
+                session.query(Contact)
+                .filter(
+                    Contact.user_id == batch.user_id,
+                    Contact.purpose_id == batch.purpose_id,
+                    Contact.batch_id == None,
+                    Contact.status == "PENDING",
+                )
+                .order_by(Contact.created_at.asc())
+                .first()
+            )
+            if replacement:
+                replacement.batch_id = batch.id
+                session.commit()
+                queue.append(replacement)
+                replaced_count += 1
+                logger.info(
+                    "Auto-replaced unsubscribed contact %s with %s in batch %s",
+                    contact.email,
+                    replacement.email,
+                    batch.name,
+                )
+            continue
+
         # 1. Pre-send verification
         is_valid, fail_reason = verify_email_domain(contact.email)
 
@@ -241,13 +285,30 @@ def dispatch_batch(
             personalizer=personalizer,
         )
 
-        # 5. Dispatch email
+        # 5. Append Unsubscribe Header & Footer (RFC 2369 / RFC 8058)
+        unsub_token = generate_unsubscribe_token(
+            user_id=batch.user_id,
+            contact_id=contact.id,
+            email=contact.email,
+            secret_key=settings.ENCRYPTION_MASTER_KEY,
+        )
+        api_base = (
+            "https://mailorbit-api-nrxf.onrender.com"
+            if settings.ENVIRONMENT == "production"
+            else "http://localhost:8000"
+        )
+        unsub_url = f"{api_base}/api/v1/unsubscribe?token={unsub_token}"
+        final_body = append_unsubscribe_footer(body_text, unsub_url)
+        unsub_headers = generate_unsubscribe_headers(unsub_url)
+
+        # 6. Dispatch email
         try:
             send_res = sender_client.send_email(
                 from_email=effective_from,
                 to_email=contact.email,
                 subject=subject,
-                body_text=body_text,
+                body_text=final_body,
+                headers=unsub_headers,
             )
             contact.status = "SENT"
             contact.sent_at = utc_now()

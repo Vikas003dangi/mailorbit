@@ -34,6 +34,7 @@ class LocalMailpitSender:
         body_text: str,
         body_html: Optional[str] = None,
         attachments: Optional[List[Dict[str, Any]]] = None,
+        headers: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
         """
         Sends MIME formatted email to Mailpit SMTP server.
@@ -45,6 +46,10 @@ class LocalMailpitSender:
         msg["X-Mailer"] = "MailOrbit/0.1.0"
         message_id = f"<{uuid.uuid4()}@mailorbit.local>"
         msg["Message-ID"] = message_id
+
+        if headers:
+            for k, v in headers.items():
+                msg[k] = v
 
         # Text/HTML alternative body
         alt_part = MIMEMultipart("alternative")

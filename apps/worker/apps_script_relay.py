@@ -60,6 +60,7 @@ class AppsScriptRelayClient:
         body_html: Optional[str] = None,
         attachments: Optional[List[Dict[str, Any]]] = None,
         idempotency_key: Optional[str] = None,
+        headers: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
         """
         Dispatches an email through Google Apps Script Web App.
@@ -73,6 +74,8 @@ class AppsScriptRelayClient:
             "html_body": body_html or body_text,
             "idempotency_key": idempotency_key or str(uuid.uuid4()),
         }
+        if headers:
+            payload["headers"] = headers
 
         if attachments:
             payload["attachments"] = attachments

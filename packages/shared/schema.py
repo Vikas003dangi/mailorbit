@@ -40,6 +40,7 @@ class User(Base):
     batches = relationship("Batch", back_populates="user", cascade="all, delete-orphan")
     contacts = relationship("Contact", back_populates="user", cascade="all, delete-orphan")
     attachments = relationship("Attachment", back_populates="user", cascade="all, delete-orphan")
+    do_not_contact_records = relationship("DoNotContact", back_populates="user", cascade="all, delete-orphan")
 
 
 class Profile(Base):
@@ -204,6 +205,27 @@ class Contact(Base):
         UniqueConstraint("user_id", "email", name="uq_user_contact_email"),
         Index("ix_contacts_user_status", "user_id", "status"),
         Index("ix_contacts_user_purpose_status", "user_id", "purpose_id", "status"),
+    )
+
+
+class DoNotContact(Base):
+    """
+    Opt-out registry protecting recipients from future outreach.
+    Checked before every send.
+    """
+    __tablename__ = "do_not_contact"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    email = Column(String(255), nullable=False)
+    reason = Column(String(255), default="Unsubscribed", nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+    user = relationship("User", back_populates="do_not_contact_records")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "email", name="uq_user_dnc_email"),
+        Index("ix_dnc_user_email", "user_id", "email"),
     )
 
 
