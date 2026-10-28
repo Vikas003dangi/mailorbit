@@ -49,12 +49,16 @@ Rather than merging worker code into the API endpoints, the worker is encapsulat
 - **Conclusion:** Local dev environment has uninhibited outbound egress. Local testing of the Google Apps Script relay and Mailpit will succeed.
 
 #### B. Render Free Tier Web Service:
-- **Endpoint:** `GET /api/v1/diagnostics/egress`
-- **Expected Results:**
-  - 1. TCP `smtp.gmail.com:587`: **`[FAIL]`** - Connection timed out (Render Free drops outbound 587 traffic).
-  - 2. TCP `script.google.com:443`: **`[PASS]`** - Connected successfully.
-  - 3. HTTPS GET `script.google.com`: **`[PASS]`** - HTTP 200 or 302.
-- **Conclusion:** Proves that direct SMTP fails on Render Free, confirming that the per-user Google Apps Script relay is technically necessary and validated.
+- **Service Name:** `mailorbit-api` (`srv-dbgsb8ks728c73c96fe0`)
+- **Live URL:** `https://mailorbit-api-nrxf.onrender.com`
+- **Endpoint:** `GET /api/v1/diagnostics/egress?secret=sec_orbit_test_7f21a`
+- **Measured at:** 2026-10-28 15:37:29 IST (`2026-10-28T10:07:29.221994Z`)
+- **Actual Measured Results:**
+  - 1. TCP `smtp.gmail.com:587`: **`[FAIL]`** - `Connection timed out (5.0s)`
+  - 2. TCP `script.google.com:443`: **`[PASS]`** - `Connected successfully`
+  - 3. HTTPS GET `script.google.com`: **`[PASS]`** - `HTTP 200 (OK)`
+- **`relay_ready`:** **`true`**
+- **Conclusion:** Empirically proves that direct outbound SMTP is blocked on Render Free Tier, whereas outbound HTTPS to `script.google.com:443` is fully operational. This confirms that the per-user Google Apps Script relay is the verified, working architecture for free-tier email dispatch.
 
 ---
 
@@ -65,3 +69,4 @@ Rather than merging worker code into the API endpoints, the worker is encapsulat
 - **Idempotency:** Cached via `CacheService` for 6 hours using `idem_<key>` to prevent duplicate sends on network retries.
 - **Attachment Guard:** Strict 25 MB payload threshold enforced before calling `MailApp.sendEmail()`.
 - **Zero Secret Logging:** Neither the token nor request authorization headers are logged to Cloud Logging or execution transcripts.
+
