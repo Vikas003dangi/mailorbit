@@ -1196,8 +1196,8 @@ export default function MailOrbitDashboard() {
             </div>
           )}
 
-          {/* If Not Logged In and not in Demo Mode, Display the Auth Card */}
-          {!token && !isDemoMode ? (
+          {/* If Not Logged In and not in Demo Mode (and not viewing About tab), Display Auth Card */}
+          {!token && !isDemoMode && activeTab !== "about" ? (
             <div style={{ maxWidth: "440px", margin: "40px auto", background: "#111827", padding: "36px", borderRadius: "14px", border: "1px solid #1f2937", boxShadow: "0 10px 30px rgba(0,0,0,0.5)" }}>
               <div style={{ textAlign: "center", marginBottom: "26px" }}>
                 <div style={{ display: "flex", justifyContent: "center", marginBottom: "12px" }}>
