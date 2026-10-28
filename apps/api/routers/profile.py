@@ -33,6 +33,19 @@ class ProfileUpdate(BaseModel):
     summary: Optional[str] = None
 
 
+class JDMatchRequest(BaseModel):
+    jd_text: str
+    resume_text: Optional[str] = ""
+
+
+class JDMatchResponse(BaseModel):
+    match_score: int
+    matched_skills: List[str]
+    missing_skills: List[str]
+    total_jd_skills_found: int
+    pitch_angle: str
+
+
 @router.get("", response_model=ProfileOut)
 def get_profile(
     current_user: User = Depends(get_current_user),
@@ -76,3 +89,26 @@ def update_profile(
     db.commit()
     db.refresh(profile)
     return profile
+
+
+@router.post("/match-jd", response_model=JDMatchResponse)
+def match_jd(
+    payload: JDMatchRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Scans a job description against the user's profile skills and resume,
+    identifying overlapping keywords, gaps, and match percentage.
+    """
+    profile = db.query(Profile).filter(Profile.user_id == current_user.id).first()
+    skills = profile.skills if profile and profile.skills else []
+
+    from apps.api.services.keyword_matcher import match_profile_to_jd
+
+    res = match_profile_to_jd(
+        profile_skills=skills,
+        jd_text=payload.jd_text,
+        resume_text=payload.resume_text or (profile.summary if profile else ""),
+    )
+    return JDMatchResponse(**res)

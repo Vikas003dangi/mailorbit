@@ -57,6 +57,15 @@ class GeminiPersonalizer:
         subject_hint = (purpose.default_subject_template if purpose else "").strip()
         body_hint = (purpose.default_body_template if purpose else "").strip()
 
+        # Extract matching skills if candidate profile and recipient role/notes exist
+        matching_skills_str = ""
+        if profile and profile.skills:
+            from apps.api.services.keyword_matcher import match_profile_to_jd
+            jd_sample = f"{recipient_role} {contact.company or ''} {json.dumps(contact.custom_pitch or {})}"
+            match_res = match_profile_to_jd(profile_skills=profile.skills, jd_text=jd_sample)
+            if match_res["matched_skills"]:
+                matching_skills_str = f"- Overlapping Technical Skills to highlight: {', '.join(match_res['matched_skills'][:4])}\n"
+
         prompt = f"""You are an elite, concise B2B cold email copywriter.
 Generate a high-converting, personalized cold outreach email from {sender_name} to {recipient_name}.
 
@@ -64,7 +73,7 @@ Recipient Details:
 - Name: {recipient_name}
 - Company: {recipient_company}
 - Role / Department: {recipient_role}
-
+{matching_skills_str}
 Campaign Purpose: {campaign_name}
 Subject Line Guideline: {subject_hint or "Quick question regarding " + recipient_company}
 Body Template Reference:
