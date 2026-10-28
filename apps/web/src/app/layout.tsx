@@ -12,7 +12,21 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body style={{ fontFamily: "system-ui, sans-serif", margin: 0, padding: 0, background: "#0f172a", color: "#f8fafc" }}>
+      <head>
+        <style>{`
+          @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+          .spin {
+            animation: spin 1s linear infinite;
+          }
+          * {
+            box-sizing: border-box;
+          }
+        `}</style>
+      </head>
+      <body style={{ fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif", margin: 0, padding: 0, background: "#090d16", color: "#f8fafc" }}>
         {children}
       </body>
     </html>
