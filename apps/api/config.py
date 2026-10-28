@@ -20,6 +20,10 @@ class Settings(BaseSettings):
         "https://vikas003dangi.github.io",
     ]
 
+    CLOUDINARY_CLOUD_NAME: str | None = None
+    CLOUDINARY_API_KEY: str | None = None
+    CLOUDINARY_API_SECRET: str | None = None
+
     model_config = SettingsConfigDict(
         env_file=(".env.local", ".env"),
         env_file_encoding="utf-8",

@@ -17,6 +17,7 @@ dependencies = [
     "pyjwt>=2.8.0",
     "bcrypt>=4.1.2",
     "python-multipart>=0.0.9",
+    "cloudinary>=1.46.3",
 ]
 
 [dependency-groups]

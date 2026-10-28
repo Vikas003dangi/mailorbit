@@ -8,6 +8,7 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
+    Table,
     Text,
     UniqueConstraint,
 )
@@ -38,6 +39,7 @@ class User(Base):
     purposes = relationship("Purpose", back_populates="user", cascade="all, delete-orphan")
     batches = relationship("Batch", back_populates="user", cascade="all, delete-orphan")
     contacts = relationship("Contact", back_populates="user", cascade="all, delete-orphan")
+    attachments = relationship("Attachment", back_populates="user", cascade="all, delete-orphan")
 
 
 class Profile(Base):
@@ -113,6 +115,7 @@ class Purpose(Base):
     user = relationship("User", back_populates="purposes")
     batches = relationship("Batch", back_populates="purpose", cascade="all, delete-orphan")
     contacts = relationship("Contact", back_populates="purpose")
+    attachments = relationship("Attachment", secondary="purpose_attachments", back_populates="purposes")
 
 
 class Batch(Base):
@@ -137,6 +140,36 @@ class Batch(Base):
     user = relationship("User", back_populates="batches")
     purpose = relationship("Purpose", back_populates="batches")
     contacts = relationship("Contact", back_populates="batch")
+
+
+purpose_attachments = Table(
+    "purpose_attachments",
+    Base.metadata,
+    Column("purpose_id", UUID(as_uuid=True), ForeignKey("purposes.id", ondelete="CASCADE"), primary_key=True),
+    Column("attachment_id", UUID(as_uuid=True), ForeignKey("attachments.id", ondelete="CASCADE"), primary_key=True),
+    Column("created_at", DateTime(timezone=True), default=utc_now, nullable=False),
+)
+
+
+class Attachment(Base):
+    """
+    Document library item stored in Cloudinary (e.g. Resume, Portfolio, Proposal).
+    Delivered with signed/authenticated URLs and linkable to multiple campaign purposes.
+    """
+    __tablename__ = "attachments"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    filename = Column(String(255), nullable=False)
+    file_url = Column(String(1024), nullable=False)
+    cloudinary_public_id = Column(String(255), nullable=False)
+    size_bytes = Column(Integer, nullable=False)
+    content_type = Column(String(100), default="application/pdf", nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
+
+    user = relationship("User", back_populates="attachments")
+    purposes = relationship("Purpose", secondary=purpose_attachments, back_populates="attachments")
 
 
 class Contact(Base):
