@@ -91,3 +91,4 @@ The v1 goal is that a new user sends their first safe batch within 15 minutes of
 - 25-40s randomized delay between dispatches.
 - Bounce threshold safeguard (>10% pauses sender).
 - Zero secret logging.
+

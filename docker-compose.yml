@@ -31,3 +31,4 @@ services:
 volumes:
   mailorbit_pgdata:
     driver: local
+

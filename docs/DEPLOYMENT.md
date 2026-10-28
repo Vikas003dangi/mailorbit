@@ -110,3 +110,4 @@ Once Render finishes deploying:
 - **How to check:**
   1. Open Cloudinary Console -> Dashboard.
   2. View the **Monthly Credits Usage** donut chart.
+

@@ -2,9 +2,11 @@ import logging
 from typing import Optional
 from fastapi import FastAPI, Header, HTTPException, Query, Security, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 
 from apps.api.config import settings
 from apps.api.diagnostics import run_egress_check
+from apps.api.routers import ai_keys, auth, profile, senders
 from apps.worker import InMemoryJobQueue, WorkerRunner
 from packages.shared.models import EgressReport, HealthResponse, TickResponse
 
@@ -26,6 +28,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Include Feature Routers
+app.include_router(auth.router)
+app.include_router(profile.router)
+app.include_router(senders.router)
+app.include_router(ai_keys.router)
+
 # Initialize in-process worker queue & runner
 queue = InMemoryJobQueue()
 worker = WorkerRunner(queue=queue)
@@ -41,6 +49,12 @@ def verify_tick_secret(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing tick authentication secret",
         )
+
+
+@app.get("/", include_in_schema=False)
+def root():
+    """Redirects root visits to the interactive API documentation."""
+    return RedirectResponse(url="/docs")
 
 
 @app.get("/api/v1/health", response_model=HealthResponse, tags=["System"])

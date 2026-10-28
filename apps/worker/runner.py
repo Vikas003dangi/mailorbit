@@ -80,3 +80,4 @@ class WorkerRunner:
         self._stop_event.set()
         if self._thread:
             self._thread.join(timeout=3.0)
+

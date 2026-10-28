@@ -110,3 +110,4 @@ class InMemoryJobQueue(JobQueue):
                     job.updated_at = now
                     return True
             return False
+

@@ -63,3 +63,4 @@ Google will display a permission prompt because the script sends emails on your 
    - **Script URL**: `https://script.google.com/macros/s/.../exec`
    - **Auth Token**: The exact string you saved in Step 3.
 4. Click **Test Relay**. MailOrbit will verify connectivity and confirm your remaining daily sending quota.
+

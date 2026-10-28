@@ -73,3 +73,4 @@ The in-process worker lives in `apps/worker` and is imported by `apps/api`.
 - **M8:** Resume scanning, JD keyword matching, and bullet suggestions.
 - **M9:** Opt-out header/footer, do-not-contact list, account export/deletion.
 - **M10:** Hardening, end-to-end integration test against Mailpit, Render staging deployment.
+

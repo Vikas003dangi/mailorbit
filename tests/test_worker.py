@@ -42,3 +42,4 @@ def test_worker_runner_dispatch():
     assert count == 2
     assert "alice@example.com" in processed_jobs
     assert "bob@example.com" in processed_jobs
+

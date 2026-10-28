@@ -83,3 +83,4 @@ def run_egress_check() -> EgressReport:
         relay_ready=relay_ready,
         note=note,
     )
+

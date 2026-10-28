@@ -19,3 +19,4 @@ class DispatchChannel(str, Enum):
     FAKE_SMTP = "FAKE_SMTP"
     APPS_SCRIPT_RELAY = "APPS_SCRIPT_RELAY"
     DIRECT_SMTP = "DIRECT_SMTP"
+

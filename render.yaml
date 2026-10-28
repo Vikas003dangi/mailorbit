@@ -24,3 +24,4 @@ services:
         sync: false
       - key: TICK_SECRET
         generateValue: true
+

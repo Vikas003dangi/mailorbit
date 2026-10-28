@@ -98,3 +98,4 @@ if __name__ == "__main__":
     relay_ok = (results["script_tcp_443"]["status"] == "PASS" and 
                 results["script_https_get"]["status"] == "PASS")
     sys.exit(0 if relay_ok else 1)
+

@@ -46,3 +46,4 @@ def test_egress_diagnostics_succeeds_with_secret():
     assert data["smtp_587"]["status"] in ["PASS", "FAIL"]
     assert data["script_tcp_443"]["status"] in ["PASS", "FAIL"]
     assert data["script_https_get"]["status"] in ["PASS", "FAIL"]
+

@@ -194,3 +194,4 @@ function jsonResponse(data, statusCode) {
 function stripHtml(html) {
   return html.replace(/<[^>]*>?/gm, " ").replace(/\s+/g, " ").trim();
 }
+

@@ -64,3 +64,4 @@ class JobQueue(ABC):
     def heartbeat(self, job_id: str, lease_id: str, extension_seconds: int = 60) -> bool:
         """Extend lease of a currently running job."""
         pass
+

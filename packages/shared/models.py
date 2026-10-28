@@ -30,3 +30,4 @@ class TickResponse(BaseModel):
     jobs_claimed: int = 0
     jobs_processed: int = 0
     message: str = "Watchdog tick completed successfully"
+
