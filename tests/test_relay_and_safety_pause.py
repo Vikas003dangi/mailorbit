@@ -211,8 +211,8 @@ def test_relay_quota_exhaustion_pauses_batch():
         session.add(batch)
         session.flush()
 
-        c1 = Contact(user_id=user.id, purpose_id=purpose.id, batch_id=batch.id, email="lead1@tech.com", name="L1", company="C1")
-        c2 = Contact(user_id=user.id, purpose_id=purpose.id, batch_id=batch.id, email="lead2@tech.com", name="L2", company="C2")
+        c1 = Contact(user_id=user.id, purpose_id=purpose.id, batch_id=batch.id, email="lead1@goodtech.com", name="L1", company="C1")
+        c2 = Contact(user_id=user.id, purpose_id=purpose.id, batch_id=batch.id, email="lead2@goodtech.com", name="L2", company="C2")
         session.add_all([c1, c2])
         session.commit()
         batch_id = batch.id

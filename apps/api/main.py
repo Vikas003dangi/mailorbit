@@ -153,8 +153,8 @@ def status_page(db: Session = Depends(get_db)):
       <li class="stack-item"><span class="stack-name">Web Application</span><span class="stack-val">Mounted at root "/" (Next.js Static Export)</span></li>
       <li class="stack-item"><span class="stack-name">Relational Database</span><span class="stack-val">Neon PostgreSQL 16 (Ohio) - {'Connected' if db_ok else 'Degraded'}</span></li>
       <li class="stack-item"><span class="stack-name">Outbound Egress Relay</span><span class="stack-val">Google Apps Script HTTPS:443 (10% Safety Pause)</span></li>
-      <li class="stack-item"><span class="stack-name">Watchdog Scheduler</span><span class="stack-val">cron-job.org /tick (Header-only auth)</span></li>
-      <li class="stack-item"><span class="stack-name">Keepalive Monitor</span><span class="stack-val">UptimeRobot /api/v1/health</span></li>
+      <li class="stack-item"><span class="stack-name">Watchdog Scheduler</span><span class="stack-val">cron-job.org /tick (Header-only auth, 10m active 06:00-24:00 IST)</span></li>
+      <li class="stack-item"><span class="stack-name">Keepalive Monitor</span><span class="stack-val">Disabled (UptimeRobot paused; compute sleeps 00:00-06:00 IST)</span></li>
       <li class="stack-item"><span class="stack-name">Attachment Storage</span><span class="stack-val">Cloudinary Storage (Signed URLs)</span></li>
     </ul>
     <a href="/" class="btn">← Back to MailOrbit App</a>

@@ -142,19 +142,14 @@ def signup(request: Request, payload: SignupRequest, response: Response, db: Ses
 
 @router.post("/login", response_model=TokenResponse)
 def login(request: Request, payload: LoginRequest, response: Response, db: Session = Depends(get_db)):
-    """Authenticates user credentials and issues new access and refresh tokens with rate limiting."""
-    rate_limiter.check(request, "login", max_requests=5, window_seconds=60)
+    """Authenticates user credentials and issues new access and refresh tokens with dual-keyed rate limiting."""
+    rate_limiter.check(request, "login", max_requests=5, window_seconds=60, identifier=payload.email)
 
     user = db.query(User).filter(User.email == payload.email.lower(), User.is_active == True).first()
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Account not found. Please click 'Sign Up' to create your account.",
-        )
-    if not verify_password(payload.password, user.password_hash):
+    if not user or not verify_password(payload.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect password. Please try again.",
+            detail="Incorrect email or password",
         )
 
     access_token = create_access_token(str(user.id), user.email, settings.TICK_SECRET)

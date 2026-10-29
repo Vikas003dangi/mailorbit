@@ -118,3 +118,25 @@ def test_forgot_password_and_reset_flow():
     # 6. Verify login with new password
     new_login = client.post("/api/v1/auth/login", json={"email": email, "password": "NewPassword123!"})
     assert new_login.status_code == 200
+
+
+def test_login_generic_error_no_enumeration():
+    # Unknown email gives 401 with identical generic message
+    res_unknown = client.post(
+        "/api/v1/auth/login",
+        json={"email": f"nonexistent_{uuid.uuid4().hex[:8]}@example.com", "password": "AnyPassword!"},
+    )
+    assert res_unknown.status_code == 401
+    assert res_unknown.json()["detail"] == "Incorrect email or password"
+
+    # Known email with wrong password gives exact same 401 message
+    test_email = f"known_{uuid.uuid4().hex[:8]}@example.com"
+    client.post("/api/v1/auth/signup", json={"email": test_email, "password": "CorrectPassword123!"})
+
+    res_wrong_pw = client.post(
+        "/api/v1/auth/login",
+        json={"email": test_email, "password": "WrongPassword!"},
+    )
+    assert res_wrong_pw.status_code == 401
+    assert res_wrong_pw.json()["detail"] == "Incorrect email or password"
+    assert res_unknown.json()["detail"] == res_wrong_pw.json()["detail"]

@@ -72,21 +72,27 @@ def verify_email_domain(email: str) -> Tuple[bool, Optional[str]]:
             if mx_records:
                 _DNS_MX_CACHE[domain] = (True, None)
                 return True, None
-        except (dns.resolver.NoAnswer, dns.resolver.NoNameservers):
-            # Fallback to A record per RFC 5321
+        except dns.resolver.NoAnswer:
+            # Domain exists but has no MX record. Fallback to A record per RFC 5321.
             try:
                 a_records = resolver.resolve(domain, "A")
                 if a_records:
                     _DNS_MX_CACHE[domain] = (True, None)
                     return True, None
-            except Exception:
+            except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN):
                 res = (False, f"Domain has no valid MX or A records: {domain}")
                 _DNS_MX_CACHE[domain] = res
                 return res
+            except (dns.exception.Timeout, dns.resolver.ServerFailure, dns.resolver.NoNameservers) as trans_exc:
+                logger.warning("Transient DNS error on fallback A record for %s: %s", domain, trans_exc)
+                return True, None
         except dns.resolver.NXDOMAIN:
             res = (False, f"Domain does not exist (NXDOMAIN): {domain}")
             _DNS_MX_CACHE[domain] = res
             return res
+        except (dns.exception.Timeout, dns.resolver.ServerFailure, dns.resolver.NoNameservers) as trans_exc:
+            logger.warning("Transient DNS error on MX lookup for %s: %s", domain, trans_exc)
+            return True, None
     except Exception as exc:
         logger.warning("DNS lookup exception for %s: %s", domain, exc)
         if "NXDOMAIN" in str(exc) or "does not exist" in str(exc):

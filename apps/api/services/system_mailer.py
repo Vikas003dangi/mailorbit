@@ -125,3 +125,4 @@ def send_password_reset_email(to_email: str, token: str, base_url: str = "") -> 
     </div>
     """
     return send_system_email(to_email=to_email, subject=subject, html_content=html)
+

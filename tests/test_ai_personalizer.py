@@ -45,7 +45,7 @@ def create_test_setup(session):
     contact = Contact(
         user_id=user.id,
         purpose_id=purpose.id,
-        email="lead.alice@innovate.example.com",
+        email="lead.alice@goodtech.com",
         name="Alice Walker",
         company="Innovate AI",
         role="VP of Engineering",
@@ -218,7 +218,7 @@ def test_dispatch_batch_with_ai_personalization_integration():
     # Verify mock sender received personalized email!
     mock_sender.send_email.assert_called_once()
     call_kwargs = mock_sender.send_email.call_args.kwargs
-    assert call_kwargs["to_email"] == "lead.alice@innovate.example.com"
+    assert call_kwargs["to_email"] == "lead.alice@goodtech.com"
     assert call_kwargs["subject"] == "Tailored Outreach for Innovate AI"
     assert "VP of Engineering leadership at Innovate AI" in call_kwargs["body_text"]
 
