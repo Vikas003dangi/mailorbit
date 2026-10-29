@@ -70,25 +70,27 @@ def upload_attachment(
             "content_type": content_type,
         }
 
-    # Upload to Cloudinary with resource_type auto/raw for documents
+    # Upload to Cloudinary authenticated/private storage
     clean_type = content_type.lower().split(";")[0].strip()
     resource_type = "image" if clean_type.startswith("image/") else "raw"
 
     upload_result = cloudinary.uploader.upload(
         file_bytes,
         resource_type=resource_type,
+        type="authenticated",
         folder="mailorbit/attachments",
-        public_id=None,
         use_filename=True,
         unique_filename=True,
     )
 
-    secure_url = upload_result.get("secure_url") or upload_result.get("url")
     public_id = upload_result.get("public_id")
     size = upload_result.get("bytes", len(file_bytes))
+    
+    # Generate signed expiring URL (default 1 hour)
+    signed_url = generate_signed_url(public_id, content_type=content_type, expires_in_seconds=3600)
 
     return {
-        "file_url": secure_url,
+        "file_url": signed_url,
         "cloudinary_public_id": public_id,
         "size_bytes": size,
         "filename": filename,
@@ -96,8 +98,33 @@ def upload_attachment(
     }
 
 
+def generate_signed_url(
+    public_id: str,
+    content_type: Optional[str] = None,
+    expires_in_seconds: int = 3600,
+) -> str:
+    """Generates a time-limited signed URL for accessing authenticated Cloudinary assets."""
+    if not configure_cloudinary():
+        return f"https://res.cloudinary.com/simulated/authenticated/{public_id}"
+
+    import time
+    clean_type = (content_type or "").lower().split(";")[0].strip()
+    resource_type = "image" if clean_type.startswith("image/") else "raw"
+    expires_at = int(time.time()) + expires_in_seconds
+
+    url, _ = cloudinary.utils.cloudinary_url(
+        public_id,
+        resource_type=resource_type,
+        type="authenticated",
+        sign_url=True,
+        expires_at=expires_at,
+        secure=True,
+    )
+    return url
+
+
 def delete_attachment(public_id: str, content_type: Optional[str] = None) -> bool:
-    """Deletes an asset from Cloudinary storage."""
+    """Deletes an authenticated asset from Cloudinary storage."""
     if not configure_cloudinary():
         return True
 
@@ -105,7 +132,7 @@ def delete_attachment(public_id: str, content_type: Optional[str] = None) -> boo
     resource_type = "image" if clean_type.startswith("image/") else "raw"
 
     try:
-        res = cloudinary.uploader.destroy(public_id, resource_type=resource_type)
+        res = cloudinary.uploader.destroy(public_id, resource_type=resource_type, type="authenticated")
         return res.get("result") in ("ok", "not found")
     except Exception as exc:
         logger.error("Failed to delete Cloudinary asset %s: %s", public_id, exc)

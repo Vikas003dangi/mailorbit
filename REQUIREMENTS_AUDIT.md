@@ -190,6 +190,8 @@
    While individual files can be uploaded to Cloudinary up to 5 MB, `dispatcher.py` does not currently query `purpose.attachments`, does not download them, and does not forward them to the relay during automated batch execution.
 4. **"Full deliverability suite active" (H7, H10, H11):**  
    Inbound bounce notice reading via Gmail/Message-ID, reply detection, and automated follow-up sequencing are not built.
+5. **"Live Relay Sends from Render" (H1, H2, M2):**  
+   Plainly acknowledged: No email has ever been sent through a real Google Apps Script relay from the live Render service. Previous test scripts executed direct SMTP locally from the development workstation. Zero `SenderRelay` records exist in production. All 168 previously simulated `SENT` records in the production database have been relabeled to `PENDING` with `sent_at = NULL`. Live relay delivery remains strictly `NOT-VERIFIED` pending real user relay connection.
 
 ---
 

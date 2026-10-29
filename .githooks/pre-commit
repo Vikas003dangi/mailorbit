@@ -1,0 +1,14 @@
+#!/bin/sh
+# MailOrbit Pre-Commit Secret Scanner Hook
+# Scans staged files for high-entropy secrets, API keys, passwords, and tokens before committing.
+
+echo "[Security] Scanning staged files for secrets and credentials..."
+
+python scripts/scan_staged_secrets.py
+if [ $? -ne 0 ]; then
+    echo "[REJECTED] Commit blocked by MailOrbit secret scanner. Remove secrets before committing."
+    exit 1
+fi
+
+echo "[Security] Secret scan passed cleanly."
+exit 0

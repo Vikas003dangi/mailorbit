@@ -1606,6 +1606,35 @@ export default function MailOrbitDashboard() {
                     </div>
                   </div>
 
+                  {/* Prominent Action Banner for Paused Batches */}
+                  {batches.some((b) => b.paused_reason?.includes("Connect your sender")) && (
+                    <div style={{ background: "rgba(245, 158, 11, 0.12)", border: "1px solid #f59e0b", borderRadius: "10px", padding: "16px 20px", marginBottom: "24px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                        <span style={{ fontSize: "1.3rem" }}>⚠️</span>
+                        <div>
+                          <div style={{ fontWeight: 700, color: "#fbbf24", fontSize: "0.95rem" }}>Sender Configuration Required</div>
+                          <div style={{ fontSize: "0.82rem", color: "#d1d5db" }}>Outreach batches are paused because no active Google Apps Script relay is connected. Connect your sender to resume dispatching.</div>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setActiveTab("settings")}
+                        style={{ background: "#f59e0b", color: "#111827", border: "none", padding: "8px 16px", borderRadius: "6px", fontWeight: 700, fontSize: "0.82rem", cursor: "pointer", whiteSpace: "nowrap" }}
+                      >
+                        Connect Sender Relay →
+                      </button>
+                    </div>
+                  )}
+
+                  {batches.some((b) => b.paused_reason?.includes("quota") || b.status === "QUOTA_EXCEEDED") && (
+                    <div style={{ background: "rgba(168, 85, 247, 0.12)", border: "1px solid #a855f7", borderRadius: "10px", padding: "16px 20px", marginBottom: "24px", display: "flex", alignItems: "center", gap: "12px" }}>
+                      <span style={{ fontSize: "1.3rem" }}>⏳</span>
+                      <div>
+                        <div style={{ fontWeight: 700, color: "#c084fc", fontSize: "0.95rem" }}>Daily Gmail Quota Paused (Auto-Resume Active)</div>
+                        <div style={{ fontSize: "0.82rem", color: "#d1d5db" }}>Google Apps Script 24-hour rolling send limit reached. MailOrbit watchdog is monitoring your quota and will automatically resume dispatches when Google replenishes your quota.</div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* High Level Metrics Cards: Scheduled, Running, Completed, Failed */}
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "14px", marginBottom: "32px" }}>
                     <div style={{ background: "#111827", padding: "18px", borderRadius: "10px", border: "1px solid #1f2937" }}>
@@ -1671,24 +1700,49 @@ export default function MailOrbitDashboard() {
                             background: "#1f2937",
                             padding: "16px",
                             borderRadius: "8px",
-                            borderLeft: `4px solid ${b.status === "COMPLETED" ? "#22c55e" : b.status === "ACTIVE" ? "#38bdf8" : "#f59e0b"}`,
+                            borderLeft: `4px solid ${
+                              b.status === "COMPLETED"
+                                ? "#22c55e"
+                                : b.status === "ACTIVE"
+                                ? "#38bdf8"
+                                : b.paused_reason?.includes("Connect your sender")
+                                ? "#f59e0b"
+                                : b.paused_reason?.includes("quota")
+                                ? "#a855f7"
+                                : "#ef4444"
+                            }`,
                           }}
                         >
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
                             <span style={{ fontWeight: 600, fontSize: "0.95rem" }}>Batch #{b.batch_number}</span>
-                            <span
-                              style={{
-                                fontSize: "0.72rem",
-                                fontWeight: 700,
-                                padding: "2px 8px",
-                                borderRadius: "4px",
-                                background: b.status === "COMPLETED" ? "#166534" : b.status === "ACTIVE" ? "#075985" : "#78350f",
-                                color: "#ffffff",
-                              }}
-                            >
-                              {b.status}
-                            </span>
+                            {b.paused_reason?.includes("Connect your sender") ? (
+                              <span style={{ fontSize: "0.72rem", fontWeight: 700, padding: "2px 8px", borderRadius: "4px", background: "rgba(245, 158, 11, 0.2)", color: "#fbbf24", border: "1px solid #f59e0b" }}>
+                                ⚠️ SENDER REQUIRED
+                              </span>
+                            ) : b.paused_reason?.includes("quota") ? (
+                              <span style={{ fontSize: "0.72rem", fontWeight: 700, padding: "2px 8px", borderRadius: "4px", background: "rgba(168, 85, 247, 0.2)", color: "#c084fc", border: "1px solid #a855f7" }}>
+                                ⏳ QUOTA PAUSED
+                              </span>
+                            ) : (
+                              <span
+                                style={{
+                                  fontSize: "0.72rem",
+                                  fontWeight: 700,
+                                  padding: "2px 8px",
+                                  borderRadius: "4px",
+                                  background: b.status === "COMPLETED" ? "#166534" : b.status === "ACTIVE" ? "#075985" : "#78350f",
+                                  color: "#ffffff",
+                                }}
+                              >
+                                {b.status}
+                              </span>
+                            )}
                           </div>
+                          {b.paused_reason && (
+                            <div style={{ fontSize: "0.75rem", color: b.paused_reason.includes("quota") ? "#c084fc" : "#fbbf24", marginBottom: "8px", background: "#111827", padding: "6px 8px", borderRadius: "4px" }}>
+                              {b.paused_reason}
+                            </div>
+                          )}
                           <div style={{ fontSize: "0.82rem", color: "#9ca3af", marginBottom: "10px" }}>
                             Time: {b.scheduled_time || "09:30 AM"} | Contacts: {b.total_contacts || 30}
                           </div>

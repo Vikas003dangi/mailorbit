@@ -251,8 +251,9 @@ def water_fill_fair_share(sub_batches: List[SubBatch], daily_budget: int) -> Dic
   * Lead #12 fails DNS MX check (`NXDOMAIN`). Quarantined to "Not Working".
   * Engine automatically draws next pending contact (#31) from SAME campaign.
   * Lead #31 has a malformed syntax error. Quarantined to "Not Working" as well.
+  * 2 leads out of 30 initial batch leads have failed: failure rate is $2 / 30 = \mathbf{6.67\%} \le 10\%$ (below the 10% safety pause circuit breaker).
   * Engine automatically draws next pending contact (#32). Lead #32 is valid and delivers.
-  * Day finishes: exactly 30 valid emails sent.
+  * Day finishes: exactly 30 valid emails sent today.
 * **Manual Replacement Action:**
   * User opens "Not Working" section and enters a new valid email for Lead #12.
   * Lead #12's replacement is saved and inherits sequence position 12.
@@ -263,7 +264,7 @@ def water_fill_fair_share(sub_batches: List[SubBatch], daily_budget: int) -> Dic
 
 ---
 
-### Example 6: Apps Script Rolling 24-Hour Quota Ceiling
+### Example 6: Apps Script Rolling 24-Hour Quota Ceiling & Automatic Resumption
 * **Setup:** Sender daily limit set to 30. Personal Gmail account (base 100 rolling quota).
 * **Execution:**
   * On Monday at 11:00 AM, first email dispatches. Rolling 24-hour window opens.
@@ -279,6 +280,8 @@ def water_fill_fair_share(sub_batches: List[SubBatch], daily_budget: int) -> Dic
   * Sends 12 emails, then pauses cleanly with status `QUOTA_EXCEEDED` and alerts user:
     `"Relay rolling quota reached. 18 emails postponed until Google rolling quota replenishes."`
   * Avoids runtime exception crash.
+* **Automatic Resumption:**
+  * When Google's rolling 24-hour window replenishes quota (detected by the scheduled watchdog `/api/v1/tick` probing `MailApp.getRemainingDailyQuota() > 0`), the relay automatically transitions from `QUOTA_EXCEEDED` back to `ACTIVE`, the batch status resets from `PAUSED` to `PENDING`, and sending resumes automatically on the next send tick with zero manual intervention.
 
 ---
 
