@@ -140,3 +140,37 @@ def test_login_generic_error_no_enumeration():
     assert res_wrong_pw.status_code == 401
     assert res_wrong_pw.json()["detail"] == "Incorrect email or password"
     assert res_unknown.json()["detail"] == res_wrong_pw.json()["detail"]
+
+
+def test_rate_limiter_spoofed_headers_do_not_bypass():
+    """
+    Verifies that spoofing client-controlled headers does not bypass rate limits:
+    1. Varying the first X-Forwarded-For entry while the trusted proxy entry is identical.
+    2. Sending fake CF-Connecting-IP when not behind Cloudflare.
+    The rate limiter tracks the trusted proxy hop and correctly triggers HTTP 429.
+    """
+    real_client_ip = "198.51.100.50"
+    for i in range(5):
+        spoofed_fake_ip = f"10.0.0.{i+1}"
+        res = client.post(
+            "/api/v1/auth/login",
+            json={"email": f"target_{i}@example.com", "password": "BadPassword!"},
+            headers={
+                "X-Forwarded-For": f"{spoofed_fake_ip}, {real_client_ip}",
+                "CF-Connecting-IP": f"192.0.2.{i+1}",
+            },
+        )
+        assert res.status_code == 401
+
+    # 6th attempt with yet another spoofed IP but same real proxy IP must be blocked
+    res_blocked = client.post(
+        "/api/v1/auth/login",
+        json={"email": "target_6@example.com", "password": "BadPassword!"},
+        headers={
+            "X-Forwarded-For": f"10.0.0.99, {real_client_ip}",
+            "CF-Connecting-IP": "192.0.2.99",
+        },
+    )
+    assert res_blocked.status_code == 429
+    assert "Rate limit exceeded" in res_blocked.json()["detail"]
+

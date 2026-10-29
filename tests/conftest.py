@@ -8,3 +8,4 @@ def reset_rate_limiter_fixture():
     rate_limiter.reset()
     yield
     rate_limiter.reset()
+

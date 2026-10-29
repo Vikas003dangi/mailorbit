@@ -1391,6 +1391,27 @@ export default function MailOrbitDashboard() {
                 </button>
               </div>
 
+              {/* Email Verification Unavailable Notice on Signup */}
+              {authMode === "signup" && (
+                <div
+                  style={{
+                    background: "rgba(234, 179, 8, 0.12)",
+                    border: "1px solid #ca8a04",
+                    color: "#fde047",
+                    padding: "10px 14px",
+                    borderRadius: "8px",
+                    marginBottom: "16px",
+                    fontSize: "0.82rem",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "10px",
+                  }}
+                >
+                  <AlertCircle size={16} color="#eab308" style={{ flexShrink: 0 }} />
+                  <span>Email verification is temporarily unavailable. Accounts will be active upon registration.</span>
+                </div>
+              )}
+
               {/* Honest Wake-up / Retry Status Alert */}
               {authStatusText && (
                 <div
@@ -1585,38 +1606,46 @@ export default function MailOrbitDashboard() {
                     </div>
                   </div>
 
-                  {/* High Level Metrics Cards */}
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "16px", marginBottom: "32px" }}>
-                    <div style={{ background: "#111827", padding: "20px", borderRadius: "10px", border: "1px solid #1f2937" }}>
-                      <div style={{ fontSize: "0.8rem", color: "#94a3b8", fontWeight: 500, marginBottom: "8px" }}>TOTAL LEADS</div>
-                      <div style={{ fontSize: "1.8rem", fontWeight: 700, color: "#ffffff" }}>
-                        {contacts.length > 0 ? contacts.length : 360}
+                  {/* High Level Metrics Cards: Scheduled, Running, Completed, Failed */}
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "14px", marginBottom: "32px" }}>
+                    <div style={{ background: "#111827", padding: "18px", borderRadius: "10px", border: "1px solid #1f2937" }}>
+                      <div style={{ fontSize: "0.75rem", color: "#94a3b8", fontWeight: 600, marginBottom: "6px" }}>TOTAL LEADS</div>
+                      <div style={{ fontSize: "1.7rem", fontWeight: 700, color: "#ffffff" }}>
+                        {contacts.length > 0 ? contacts.length : (isDemoMode ? 360 : 0)}
                       </div>
-                      <div style={{ fontSize: "0.75rem", color: "#22c55e", marginTop: "4px" }}>Deduplicated & verified</div>
+                      <div style={{ fontSize: "0.72rem", color: "#22c55e", marginTop: "4px" }}>Deduplicated & verified</div>
                     </div>
 
-                    <div style={{ background: "#111827", padding: "20px", borderRadius: "10px", border: "1px solid #1f2937" }}>
-                      <div style={{ fontSize: "0.8rem", color: "#94a3b8", fontWeight: 500, marginBottom: "8px" }}>ACTIVE BATCHES</div>
-                      <div style={{ fontSize: "1.8rem", fontWeight: 700, color: "#38bdf8" }}>
-                        {batches.filter((b) => b.status === "ACTIVE" || b.status === "SCHEDULED").length}
+                    <div style={{ background: "#111827", padding: "18px", borderRadius: "10px", border: "1px solid #1f2937" }}>
+                      <div style={{ fontSize: "0.75rem", color: "#94a3b8", fontWeight: 600, marginBottom: "6px" }}>SCHEDULED</div>
+                      <div style={{ fontSize: "1.7rem", fontWeight: 700, color: "#f59e0b" }}>
+                        {batches.filter((b) => b.status === "SCHEDULED" || b.status === "PENDING").length}
                       </div>
-                      <div style={{ fontSize: "0.75rem", color: "#94a3b8", marginTop: "4px" }}>Pacing 30 emails / day</div>
+                      <div style={{ fontSize: "0.72rem", color: "#94a3b8", marginTop: "4px" }}>Queued for send window</div>
                     </div>
 
-                    <div style={{ background: "#111827", padding: "20px", borderRadius: "10px", border: "1px solid #1f2937" }}>
-                      <div style={{ fontSize: "0.8rem", color: "#94a3b8", fontWeight: 500, marginBottom: "8px" }}>DELIVERY ENGINE</div>
-                      <div style={{ fontSize: "1.8rem", fontWeight: 700, color: "#22c55e" }}>
-                        {relays.length > 0 || isDemoMode ? "ONLINE" : "STANDBY"}
+                    <div style={{ background: "#111827", padding: "18px", borderRadius: "10px", border: "1px solid #1f2937" }}>
+                      <div style={{ fontSize: "0.75rem", color: "#94a3b8", fontWeight: 600, marginBottom: "6px" }}>RUNNING</div>
+                      <div style={{ fontSize: "1.7rem", fontWeight: 700, color: "#38bdf8" }}>
+                        {batches.filter((b) => b.status === "ACTIVE" || b.status === "RUNNING").length}
                       </div>
-                      <div style={{ fontSize: "0.75rem", color: "#94a3b8", marginTop: "4px" }}>Google Apps Script HTTPS:443</div>
+                      <div style={{ fontSize: "0.72rem", color: "#38bdf8", marginTop: "4px" }}>In-flight dispatching</div>
                     </div>
 
-                    <div style={{ background: "#111827", padding: "20px", borderRadius: "10px", border: "1px solid #1f2937" }}>
-                      <div style={{ fontSize: "0.8rem", color: "#94a3b8", fontWeight: 500, marginBottom: "8px" }}>AI PERSONALIZER</div>
-                      <div style={{ fontSize: "1.8rem", fontWeight: 700, color: "#c084fc" }}>
-                        {aiKeys.length > 0 || isDemoMode ? "BYOK ACTIVE" : "READY"}
+                    <div style={{ background: "#111827", padding: "18px", borderRadius: "10px", border: "1px solid #1f2937" }}>
+                      <div style={{ fontSize: "0.75rem", color: "#94a3b8", fontWeight: 600, marginBottom: "6px" }}>COMPLETED</div>
+                      <div style={{ fontSize: "1.7rem", fontWeight: 700, color: "#22c55e" }}>
+                        {batches.filter((b) => b.status === "COMPLETED").length}
                       </div>
-                      <div style={{ fontSize: "0.75rem", color: "#94a3b8", marginTop: "4px" }}>Gemini 2.5 Flash Tailoring</div>
+                      <div style={{ fontSize: "0.72rem", color: "#22c55e", marginTop: "4px" }}>Successfully delivered</div>
+                    </div>
+
+                    <div style={{ background: "#111827", padding: "18px", borderRadius: "10px", border: "1px solid #1f2937" }}>
+                      <div style={{ fontSize: "0.75rem", color: "#94a3b8", fontWeight: 600, marginBottom: "6px" }}>FAILED / PAUSED</div>
+                      <div style={{ fontSize: "1.7rem", fontWeight: 700, color: "#ef4444" }}>
+                        {batches.filter((b) => b.status === "FAILED" || b.status === "PAUSED").length}
+                      </div>
+                      <div style={{ fontSize: "0.72rem", color: "#ef4444", marginTop: "4px" }}>Circuit breaker or errors</div>
                     </div>
                   </div>
 

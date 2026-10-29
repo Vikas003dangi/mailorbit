@@ -35,6 +35,8 @@ def compute_next_batch_run_utc(
 ) -> Optional[datetime]:
     """
     Computes the next upcoming run time in UTC for a given schedule and user timezone.
+    If today is an active day and the scheduled time has arrived/passed, returns the target
+    timestamp so that is_tick_due() evaluates to True and the batch runs without delay.
     """
     ref_utc = now_utc or datetime.now(timezone.utc)
     try:
@@ -54,15 +56,22 @@ def compute_next_batch_run_utc(
     target_time = time(hour=target_hour, minute=target_minute)
     allowed_days = [d.lower()[:3] for d in (scheduled_days or ["mon", "tue", "wed", "thu", "fri"])]
 
-    # Check the next 8 days to find the earliest matching day & time
-    for day_offset in range(8):
+    # 1. Check if today is an allowed day
+    today_date = local_now.date()
+    today_day_name = DAY_MAP[today_date.weekday()]
+    if today_day_name in allowed_days:
+        today_target_dt = datetime.combine(today_date, target_time, tzinfo=user_tz)
+        # If target time is later today or has already arrived today, return it
+        return today_target_dt.astimezone(timezone.utc)
+
+    # 2. Check upcoming future days (1 through 7)
+    for day_offset in range(1, 8):
         candidate_date = (local_now + timedelta(days=day_offset)).date()
         candidate_day_name = DAY_MAP[candidate_date.weekday()]
 
         if candidate_day_name in allowed_days:
             candidate_dt_local = datetime.combine(candidate_date, target_time, tzinfo=user_tz)
-            if candidate_dt_local > local_now:
-                return candidate_dt_local.astimezone(timezone.utc)
+            return candidate_dt_local.astimezone(timezone.utc)
 
     return None
 
@@ -88,28 +97,32 @@ class ScheduleCache:
         ref = now_utc or datetime.now(timezone.utc)
         return ref >= self.next_due_at
 
-    def refresh_from_db(self, session: Session) -> Optional[datetime]:
+    def refresh_from_db(
+        self,
+        session: Session,
+        user_id: Optional[uuid.UUID] = None,
+        now_utc: Optional[datetime] = None,
+    ) -> Optional[datetime]:
         """
         Queries database to find earliest next run time and any pending jobs,
         then caches the result in memory.
         """
-        now = datetime.now(timezone.utc)
+        now = now_utc or datetime.now(timezone.utc)
 
         # 1. Check if there are unhandled jobs in the queue
-        pending_jobs_count = (
-            session.query(JobModel)
-            .filter(JobModel.status.in_(["PENDING", "RUNNING"]))
-            .count()
-        )
-        self.has_pending_jobs = pending_jobs_count > 0
+        jobs_query = session.query(JobModel).filter(JobModel.status.in_(["PENDING", "RUNNING"]))
+        self.has_pending_jobs = (jobs_query.count() > 0) if user_id is None else False
 
         # 2. Query active or scheduled batches
-        batches = (
+        batch_query = (
             session.query(Batch, User.timezone)
             .join(User, Batch.user_id == User.id)
             .filter(Batch.status.in_(["ACTIVE", "PENDING"]))
-            .all()
         )
+        if user_id is not None:
+            batch_query = batch_query.filter(Batch.user_id == user_id)
+
+        batches = batch_query.all()
 
         earliest_due: Optional[datetime] = None
 

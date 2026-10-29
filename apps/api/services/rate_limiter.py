@@ -20,14 +20,27 @@ class SlidingWindowLimiter:
         self._history: Dict[Tuple[str, str], List[float]] = defaultdict(list)
 
     def get_client_ip(self, request: Request) -> str:
-        """Extracts trusted client IP handling CDN/proxy headers (Cloudflare, Render reverse-proxy)."""
-        for header in ("CF-Connecting-IP", "X-Real-IP"):
-            val = request.headers.get(header)
-            if val:
-                return val.strip()
+        """
+        Extracts trusted client IP handling reverse proxy hops.
+        Prevents client header spoofing by reading the IP appended by the trusted proxy chain
+        instead of trusting the client-supplied first X-Forwarded-For entry.
+        CF-Connecting-IP is ignored unless IS_BEHIND_CLOUDFLARE is explicitly True.
+        """
+        from apps.api.config import settings
+
+        if getattr(settings, "IS_BEHIND_CLOUDFLARE", False):
+            cf_ip = request.headers.get("CF-Connecting-IP")
+            if cf_ip:
+                return cf_ip.strip()
+
         forwarded = request.headers.get("X-Forwarded-For")
         if forwarded:
-            return forwarded.split(",")[0].strip()
+            ips = [x.strip() for x in forwarded.split(",") if x.strip()]
+            if ips:
+                proxy_count = max(1, getattr(settings, "TRUSTED_PROXY_COUNT", 1))
+                idx = -proxy_count if len(ips) >= proxy_count else 0
+                return ips[idx]
+
         return request.client.host if request.client else "unknown"
 
     def check(

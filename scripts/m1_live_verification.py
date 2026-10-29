@@ -124,7 +124,7 @@ print(f"POST /api/v1/tick?secret=... (Query param) -> Status: {s_qs}, Output: {b
 assert s_qs == 401
 
 # 2c. Get Tick Secret
-TICK_SECRET = os.getenv("TICK_SECRET", "sec_orbit_test_7f21a")
+TICK_SECRET = os.getenv("TICK_SECRET", "<YOUR_TICK_SECRET>")
 
 # Test valid header
 t0 = time.time()

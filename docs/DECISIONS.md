@@ -51,7 +51,7 @@ Rather than merging worker code into the API endpoints, the worker is encapsulat
 #### B. Render Free Tier Web Service:
 - **Service Name:** `mailorbit-api` (`srv-dbgsb8ks728c73c96fe0`)
 - **Live URL:** `https://mailorbit-api-nrxf.onrender.com`
-- **Endpoint:** `GET /api/v1/diagnostics/egress?secret=sec_orbit_test_7f21a`
+- **Endpoint:** `GET /api/v1/diagnostics/egress` (Authenticated via `X-Tick-Secret: <YOUR_TICK_SECRET>`)
 - **Measured at:** 2026-10-28 15:37:29 IST (`2026-10-28T10:07:29.221994Z`)
 - **Actual Measured Results:**
   - 1. TCP `smtp.gmail.com:587`: **`[FAIL]`** - `Connection timed out (5.0s)`

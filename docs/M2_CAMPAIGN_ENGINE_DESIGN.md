@@ -1,392 +1,308 @@
 # MailOrbit Milestone 2: Campaign Engine Redesign
-## Technical Architecture & Implementation Specification (PLAN ONLY)
+## Revised Technical Architecture & Implementation Specification (PLAN ONLY)
 
 **Date:** 2026-10-29  
-**Target Delivery:** Milestone 2  
-**Status:** DESIGN / PLAN ONLY (Pending User Approval to Build)  
-**Compatibility:** 100% backward-compatible with existing Auth, Encryption, Senders/Relays, Postgres Queue, and DB records. Zero data loss via non-destructive Alembic migration.
+**Revision:** v2.0 (Single Sender Account Fair-Share Model)  
+**Status:** DESIGN / PLAN ONLY (Awaiting User Approval; No M2 Code Written)  
+**Compatibility:** 100% backward-compatible with existing Auth, Encryption, Senders/Relays, and Postgres Queue. Zero data loss via non-destructive Alembic migration.
 
 ---
 
-## 1. Executive Summary & Core Objectives
+## 1. Core Architecture: Single Sender Account Model
 
-Milestone 2 re-architects MailOrbit's execution engine from static, one-shot batches into an elastic, multi-account **Campaign Engine**. 
-
-A **Campaign** serves as the master outreach container (e.g., *"Q4 Senior Product Designer Outreach"*). It controls:
-1. **Dynamic Mid-Run Lead Ingestion:** Contacts added mid-flight queue smoothly without resetting progress or disturbing active workers.
-2. **Fair-Share Multi-Account Budget Auto-Balancing:** Distributes daily sending workload across 1..N active sender relays (e.g., 10/10/10 across 3 accounts, or weighted allocations like 4/13/13), enforcing strict per-account quotas and deliverability safety warnings (>50/day on personal Gmail).
-3. **Calendar Scheduling & Repeat Rounds:** Configures launch date/time, active weekdays (e.g. Mon–Fri), holiday skip dates, and automated repeat follow-up rounds with strict suppression guardrails (never re-email replies, bounces, or opt-outs; minimum 7-day cooldown gap; max rounds cap).
-4. **"Not Working" Quarantine & 1-Click Replacement Audit Trail:** Automatically segregates bad-syntax, dead-DNS, and hard-bounced contacts into a dedicated folder with 1-click replacement that inherits sequence position and tracks who replaced whom, when, and why.
-5. **Size 1..N Unified Execution Path:** Executes ad-hoc single sends (size 1) or full-scale runs using the exact same pacing, encryption, template/AI personalization, and 10% safety pause circuit breaker.
-
----
-
-## 2. Relational Schema & Zero-Data-Loss Migration
-
-### 2.1 Database Entities (`packages/shared/schema.py`)
+In this model, **the daily budget belongs strictly to ONE SENDER ACCOUNT (one Gmail/relay)**, defaulting to **30 emails/day**. Multi-sender rotation is deferred to a future phase.
 
 ```
 +-----------------------------------------------------------------------------------------+
-|                                        CAMPAIGN                                         |
-|-----------------------------------------------------------------------------------------|
-| id (UUID, PK)                                                                           |
-| user_id (UUID, FK -> users.id, indexed)                                                 |
-| purpose_id (UUID, FK -> purposes.id, nullable)                                          |
-| name (VARCHAR(120), e.g. "Q4 Product Designer")                                          |
-| status (VARCHAR(30): DRAFT, ACTIVE, PAUSED, COMPLETED, CANCELLED)                       |
-| daily_budget_total (INTEGER, default 30)                                                |
-| schedule_start_date (DATE, nullable)                                                    |
-| schedule_start_time (VARCHAR(5), e.g. "09:30")                                          |
-| timezone (VARCHAR(50), default "Asia/Kolkata")                                          |
-| active_days (JSON, e.g. ["mon", "tue", "wed", "thu", "fri"])                            |
-| skip_dates (JSON, e.g. ["2026-11-01", "2026-12-25"])                                   |
-| stop_date (DATE, nullable)                                                              |
-| repeat_rounds (INTEGER, default 1, max 3)                                               |
-| current_round (INTEGER, default 1)                                                      |
-| min_round_gap_days (INTEGER, default 7)                                                 |
-| last_round_completed_at (TIMESTAMPTZ, nullable)                                         |
-| created_at / updated_at (TIMESTAMPTZ)                                                   |
+|                                ONE SENDER RELAY ACCOUNT                                 |
+|                               (e.g., you@gmail.com)                                     |
+|                                                                                         |
+|  - Configurable Daily Limit: default 30/day (warning modal if > 30, ceiling = quota)    |
+|  - Real-time Rolling Quota: reads MailApp.getRemainingDailyQuota()                      |
 +-----------------------------------------------------------------------------------------+
-       | 1                                               | 1
-       | has many                                        | has many
-       v N                                               v N
-+-----------------------------------------------+ +-----------------------------------------------+
-|                  SUB_BATCH                    | |                    CONTACT                    |
-|-----------------------------------------------| |-----------------------------------------------|
-| id (UUID, PK)                                 | | id (UUID, PK)                                 |
-| campaign_id (UUID, FK -> campaigns.id, idx)   | | campaign_id (UUID, FK -> campaigns.id, idx)   |
-| user_id (UUID, FK -> users.id)                | | purpose_id (UUID, FK -> purposes.id)          |
-| sender_relay_id (UUID, FK -> relays.id, idx)  | | sub_batch_id (UUID, FK -> sub_batches.id, idx)|
-| name (VARCHAR(120), e.g. "Batch 1 - Relay A") | | email (VARCHAR(255))                          |
-| size (INTEGER)                                | | name, company, role (VARCHAR)                 |
-| position (INTEGER)                            | | sequence_position (INTEGER, indexed)          |
-| status (PENDING, RUNNING, COMPLETED, PAUSED)  | | status (PENDING, SENT, BOUNCED, INACTIVE...)  |
-| round_number (INTEGER, default 1)             | | status_reason (TEXT)                          |
-| scheduled_date (DATE)                         | | is_not_working (BOOLEAN, default FALSE, idx)  |
-| sent_count, failed_count (INTEGER)            | | replaced_by_contact_id (UUID, FK -> self.id)  |
-| created_at, completed_at (TIMESTAMPTZ)        | | sent_at (TIMESTAMPTZ)                         |
-+-----------------------------------------------+ +-----------------------------------------------+
-                                                                 | 1
-                                                                 | has substitution audit
-                                                                 v N
-                                                  +-----------------------------------------------+
-                                                  |              CONTACT_REPLACEMENT              |
-                                                  |-----------------------------------------------|
-                                                  | id (UUID, PK)                                 |
-                                                  | campaign_id (UUID, FK -> campaigns.id, idx)   |
-                                                  | user_id (UUID, FK -> users.id)                |
-                                                  | original_contact_id (UUID, FK -> contacts.id) |
-                                                  | replaced_by_contact_id (UUID, FK -> contacts) |
-                                                  | original_email (VARCHAR(255))                 |
-                                                  | replacement_email (VARCHAR(255))              |
-                                                  | reason (VARCHAR(255))                         |
-                                                  | replaced_at (TIMESTAMPTZ, default UTC now)    |
-                                                  +-----------------------------------------------+
+                                    |
+          +-------------------------+-------------------------+
+          | hosts                                             | hosts
+          v                                                   v
++-------------------------------+                   +-------------------------------+
+|     CAMPAIGN A ("Designers")  |                   |     CAMPAIGN B ("Engineers")  |
++-------------------------------+                   +-------------------------------+
+          |                                                   |
+    +-----+-----+                                       +-----+-----+
+    |           |                                       |           |
+    v           v                                       v           v
+[Sub-Batch 1] [Sub-Batch 2]                       [Sub-Batch 1] [Sub-Batch 2]
 ```
 
-### 2.2 Sender Relay Quota & Budget Schema Extension
-
-In `SenderRelay`:
-- `daily_budget_limit`: User-configured daily target for this specific account (default: `30`).
-- `daily_sent_count`: Tracked count for current calendar date in user's timezone.
-- `last_reset_date`: Date when `daily_sent_count` was last zeroed out.
-- `is_personal_account`: Boolean flag. If `TRUE` and `daily_budget_limit > 50`, system flags deliverability risk.
-
-### 2.3 Non-Destructive Alembic Migration Plan
-
-1. **Step 1 (Add Tables):** Create `campaigns` and `contact_replacements` tables with proper foreign keys and indices.
-2. **Step 2 (Backfill Default Campaign):** For existing users with existing `batches` and `contacts`, automatically generate a default `Campaign(name="Primary Outreach", status="ACTIVE")` per user and assign existing records to it.
-3. **Step 3 (Alter Existing Tables):**
-   - Add `campaign_id` (nullable initially, backfilled, then foreign key) to `batches` and `contacts`.
-   - Add `sequence_position`, `is_not_working`, `replaced_by_contact_id` to `contacts`.
-   - Add `daily_budget_limit`, `daily_sent_count`, `last_reset_date` to `sender_relays`.
-4. **Step 4 (Zero-Downtime Guarantee):** All existing queries referencing `batches` remain operational. `Batch` model aliases to `SubBatch` seamlessly.
+### 1.1 Fair-Share Balancing Rules
+1. **Scope:** The sender account's daily allowance (e.g., 30/day) is distributed equally across all **active sub-batches** across all **active campaigns** attached to that sender account.
+2. **Formula:**
+   $$\text{Daily Allowance per Sub-Batch} = \min\left(\left\lfloor \frac{\text{Sender Daily Budget}}{\text{Count of Active Sub-Batches}} \right\rfloor, \text{Sub-Batch Pending Count}\right)$$
+   Any integer remainder is allocated 1-by-1 to sub-batches in order of creation/priority.
+3. **Ceiling:** The absolute ceiling is the sender relay's real rolling 24-hour remaining quota returned by `MailApp.getRemainingDailyQuota()`. If remaining quota $< 30$, sending stops at the real quota.
+4. **Safety Risk Warning:** If a user configures a daily budget $>30$ on a personal Gmail account, the UI displays a warning modal requiring explicit acknowledgement:
+   > *"Deliverability Notice: Setting a daily limit above 30 on a personal Gmail account increases the risk of Google spam filtering or temporary account limits. Real remaining quota is [X]. Do you wish to proceed?"*
 
 ---
 
-## 3. Core Engine Algorithms
+## 2. Google Apps Script Rolling 24-Hour Quota Handling
 
-### 3.1 Dynamic Mid-Run Lead Ingestion
+### 2.1 Quota Reset Mechanics
+* Google Apps Script quotas operate on a **rolling 24-hour window** calculated from the time each email is dispatched, **not a fixed wall-clock time like 06:00 IST**.
+* Consumer `@gmail.com` accounts have a base quota of 100 emails/rolling 24h. Google Workspace accounts have 1,500/rolling 24h.
 
-When a user imports a CSV or pastes 50 new contacts while a campaign is actively running:
-
-```text
-Algorithm: AppendLeadsToActiveCampaign(campaign_id, new_contacts)
-1. Lock campaign row (SELECT FOR UPDATE) to prevent race conditions with the scheduler tick.
-2. Query max(sequence_position) for campaign: current_max_pos.
-3. For each lead in new_contacts:
-     pos = current_max_pos + 1
-     current_max_pos = pos
-     insert Contact(
-       campaign_id=campaign_id,
-       sequence_position=pos,
-       status="PENDING",
-       is_not_working=FALSE
-     )
-4. Recalculate campaign statistics:
-     total_contacts += len(new_contacts)
-     pending_contacts += len(new_contacts)
-     estimated_days_remaining = ceil(pending_contacts / daily_budget_total)
-5. Refresh schedule_cache in memory:
-     schedule_cache.record_schedule_change(earliest_due_time)
-6. Commit transaction. Active dispatch worker picks up new contacts immediately once current sub-batch completes.
-```
-
-### 3.2 Fair-Share Daily Budget Auto-Balancer
-
-Calculates the daily dispatch allowance across multiple sender accounts.
-
-```text
-Algorithm: BalanceDailySendingQuota(campaign_id, active_relays, target_daily_total)
-Input:
-  - active_relays: List of verified relays for user with status="ACTIVE".
-  - target_daily_total: Campaign total target (e.g., 30).
-
-Steps:
-1. Filter relays that have not yet breached their daily cap:
-     available_relays = [r for r in active_relays if r.daily_sent_today < r.daily_budget_limit]
-2. If available_relays is empty:
-     Log "All sender relays have exhausted daily quota. Standing by until tomorrow's send window."
-     Return []
-3. Calculate target allocation per relay:
-     total_capacity = sum(r.daily_budget_limit - r.daily_sent_today for r in available_relays)
-     daily_needed = min(target_daily_total, total_capacity)
-     
-     # Proportionally distribute daily_needed across available relays
-     allocations = {}
-     remaining_to_allocate = daily_needed
-     
-     # Equal share division with integer remainder distribution
-     base_share = daily_needed // len(available_relays)
-     remainder = daily_needed % len(available_relays)
-     
-     for idx, relay in enumerate(available_relays):
-       quota = base_share + (1 if idx < remainder else 0)
-       # Clamp to relay's individual remaining daily cap
-       clamped_quota = min(quota, relay.daily_budget_limit - relay.daily_sent_today)
-       allocations[relay.id] = clamped_quota
-
-4. For each relay with allocation > 0:
-     Slice next PENDING contacts from campaign (ORDER BY sequence_position ASC)
-     Create SubBatch(size=allocation, sender_relay_id=relay.id)
-     Enqueue dispatch job in Postgres queue
-5. Return generated sub-batches.
-```
-
-### 3.3 Calendar Scheduler & Repeat Rounds Guardrails
-
-```text
-Algorithm: EvaluateCampaignRepeatRounds(campaign_id)
-1. Check if all contacts in Round R have reached terminal state (SENT, BOUNCED, INACTIVE, REPLIED, UNSUBSCRIBED).
-2. If PENDING contacts remain: Continue current round.
-3. If Round R is finished:
-     a. If current_round >= repeat_rounds:
-          Mark campaign.status = "COMPLETED"
-          Generate in-app notification & system email: "Campaign 'X' has completed all R rounds."
-          Return
-     b. Check cooldown gap:
-          days_since_last_round = (now() - campaign.last_round_completed_at).days
-          if days_since_last_round < campaign.min_round_gap_days:
-              Log "Round cooldown in effect. Next round due on {due_date}."
-              Return (Standby)
-     c. Initialize Round R + 1:
-          # Query eligible contacts for re-engagement
-          eligible_contacts = SELECT * FROM contacts WHERE campaign_id = campaign_id
-            AND status = "SENT"
-            AND is_not_working = FALSE
-            AND email NOT IN (SELECT email FROM do_not_contact WHERE user_id = user_id)
-            AND status NOT IN ("REPLIED", "BOUNCED", "UNSUBSCRIBED")
-          
-          # Mark all non-eligible as excluded
-          For contact in eligible_contacts:
-              Reset contact.status = "PENDING"
-              Increment contact.round_count += 1
-          
-          campaign.current_round += 1
-          campaign.last_round_completed_at = now()
-          Commit & notify user that Round R + 1 has commenced.
-```
-
-### 3.4 "Not Working" Lead Quarantine & 1-Click Replacement
-
-When an address fails pre-send DNS (NXDOMAIN, no MX/A) or returns a 5xx fatal delivery rejection:
-
-```text
-Algorithm: QuarantineAndReplaceLead(contact_id, failure_reason)
-1. Mark contact:
-     contact.status = "INACTIVE"
-     contact.status_reason = failure_reason
-     contact.is_not_working = TRUE
-2. Add contact to Campaign "Not Working" section.
-3. Decrement campaign.delivered_count and leave open slot in sub-batch.
-4. Auto-topup check:
-     If standby pending leads exist in campaign:
-       Fetch next pending lead (ORDER BY sequence_position ASC)
-       Assign to current sub-batch to maintain targeted send quota.
-5. User 1-Click Replacement Action (from UI):
-     User opens "Not Working" tab -> clicks "Replace" on contact_id.
-     Inputs: new_email, new_name, new_company, reason (e.g., "Updated email found on LinkedIn").
-     
-     Transaction:
-       new_contact = Contact(
-         campaign_id=contact.campaign_id,
-         email=new_email,
-         name=new_name,
-         company=new_company,
-         sequence_position=contact.sequence_position, # Inherits exact position
-         status="PENDING",
-         is_not_working=FALSE
-       )
-       session.add(new_contact)
-       session.flush()
-       
-       contact.replaced_by_contact_id = new_contact.id
-       
-       audit_entry = ContactReplacement(
-         campaign_id=contact.campaign_id,
-         original_contact_id=contact.id,
-         replaced_by_contact_id=new_contact.id,
-         original_email=contact.email,
-         replacement_email=new_contact.email,
-         reason=reason,
-         replaced_at=now()
-       )
-       session.add(audit_entry)
-       session.commit()
-```
-
-### 3.5 Ad-Hoc Size 1..N Sends
-
-Single sends reuse 100% of the production pipeline:
-- Input: `POST /api/v1/campaigns/quick-send` with `{to_email, name, company, role, template_or_ai, relay_id}`.
-- Generates an ephemeral `Campaign(is_ad_hoc=True, size=1)` and executes immediately via `dispatch_batch()`.
-- Guarantees AES-256-GCM secret decryption in memory, DNS domain validation, Gemini BYOK personalization, 25-40s pacing if $N > 1$, and circuit breaker checks.
+### 2.2 Relay Protocol & Failure Manifestation
+1. **Telemetry in Ping/Send:** In every response from the Google Apps Script Web App relay (`doPost`), the relay includes:
+   ```json
+   {
+     "status": "SENT",
+     "remaining_daily_quota": 68
+   }
+   ```
+   Obtained in Apps Script via `MailApp.getRemainingDailyQuota()`.
+2. **How Quota Exhaustion Arrives:**
+   * When Google's quota is exhausted, Apps Script does *not* throw an HTTP 429.
+   * Google Apps Script runtime halts execution with an uncatchable runtime exception:
+     `Exception: Service invoked too many times for one day: email.`
+   * The Apps Script Web App wrapper catches or returns this as:
+     `HTTP 200 OK` with JSON body:
+     ```json
+     {
+       "status": "ERROR",
+       "error": "Exception: Service invoked too many times for one day: email.",
+       "remaining_daily_quota": 0
+     }
+     ```
+3. **Engine Action:**
+   * The engine inspects `remaining_daily_quota`. If $0$ or if the error contains `"Service invoked too many times"`, the engine:
+     a) Immediately pauses active sub-batches on that sender relay.
+     b) Sets relay status to `QUOTA_EXCEEDED`.
+     c) Records `quota_exhausted_at = now()`.
+     d) Does not attempt further sends until the rolling window clears (probed via test ping without sending).
 
 ---
 
-## 4. Seven Worked Numerical Examples
+## 3. Campaign & Batch Management Features
 
-### Example 1: Standard Multi-Account Fair-Share Auto-Balancing
-* **Setup:** 120 contacts in campaign, 3 active sender relays (A, B, C). Daily budget set to 30/day total.
+### 3.1 Batch Creation: Manual or Automatic
+* **Automatic:** User imports leads and sets a batch size (e.g., 10 or 30). The engine automatically partitions leads into `SubBatch 1`, `SubBatch 2`, etc.
+* **Manual:** User creates named sub-batches manually and moves selected contacts between them.
+
+### 3.2 Moving Contacts Between Sub-Batches
+* Users can select contacts via checkboxes in the UI and click **"Move to Sub-Batch..."** to reassign them to another sub-batch within the same campaign.
+* Sequence positions within the destination sub-batch are appended sequentially.
+
+### 3.3 Flexible Contact Input
+* **CSV / Excel:** File upload with fuzzy column mapping.
+* **Direct Paste Box:** Text area accepting emails separated by **commas or newlines** (e.g. `alice@co.com, bob@co.com` or line-delimited lists), with automatic whitespace trimming and format validation.
+
+### 3.4 Calendar Scheduling
+* **Start Date Picker:** Includes quick shortcuts: **"Today"** and **"Tomorrow"**.
+* **Start Time & Timezone:** User-specified send time (e.g., 09:30 AM) in user's timezone.
+* **Skip Dates:** Date picker allowing users to select company holidays or dates to pause (e.g., `["2026-11-26", "2026-12-25"]`).
+* **Stop Date:** Optional calendar date after which all campaign dispatches automatically halt.
+
+### 3.5 One-Click Auto-Balance
+* Clicking **"Auto-Balance"** on a sender account recalculates the target daily allocation across all active sub-batches and campaigns, displaying the expected days to completion.
+
+### 3.6 Dynamic Mid-Run Ingestion & New Campaigns Joining
+* **Adding Leads Mid-Run:** Contacts added to a running campaign append at `sequence_position = current_max + 1`. Active workers continue dispatching without interruption; stats auto-recalculate.
+* **New Campaign Joining a Running Sender:** When Campaign 2 is activated on a sender already running Campaign 1, the fair-share engine automatically adjusts the next day's allocation (e.g. from 30/0 to 15/15), sharing the sender's budget without exceeding 30/day.
+
+---
+
+## 4. Quarantine, Replacement & Repeat Round Guardrails
+
+### 4.1 "Not Working" Folder & Automatic Cascade Replacement
+* **Trigger:** Contacts failing pre-send verification (bad format, NXDOMAIN, no MX/A) or returning permanent fatal rejections (5xx user unknown) are tagged `is_not_working = TRUE`, `status = "INACTIVE"` and moved to the campaign's **"Not Working"** section.
+* **Automatic Replacement:** The engine immediately draws the next `PENDING` contact from the **SAME campaign**.
+* **Cascade Replacement:** If the replacement contact *also* fails DNS or bounces, it is *also* quarantined, and the engine draws the next pending contact until a valid contact is delivered or the pending pool is exhausted.
+* **Audit Trail:** Every replacement writes to `contact_replacements`:
+  `original_contact_id -> replaced_by_contact_id | timestamp | reason`.
+* **Budget Safety on Manual Replacement:** If a user manually replaces a failed contact via the "Not Working" screen, the replacement inherits the sequence position, but **cannot be dispatched today if the sender has already delivered its daily limit (30)**. It dispatches in the next available scheduled send window.
+
+### 4.2 Repeat Rounds with Message Variation
+* **Cooldown Period:** Cooldown begins strictly **from the timestamp the previous round completed**, not when it started (e.g., exactly 7 full days from Round 1 completion).
+* **Permanent Suppression Filter:** The engine permanently excludes any contact who:
+  1. Replied to a previous round (`status == "REPLIED"`).
+  2. Unsubscribed or clicked List-Unsubscribe (`status == "UNSUBSCRIBED"`).
+  3. Bounced or was marked inactive (`status in ["BOUNCED", "INACTIVE"]` or `is_not_working == True`).
+  4. Is on the global `do_not_contact` table.
+* **Message Variation:** Each subsequent round MUST vary the outreach copy:
+  * **AI Variation:** Gemini rewrites the angle with a follow-up directive (*"Follow up conversationally referencing my earlier email, highlighting a different skill from my profile"*).
+  * **Template Variation:** User selects a dedicated Round 2 / Round 3 follow-up template.
+
+---
+
+## 5. Seven Worked Numerical Examples (Single Sender Model)
+
+*Assumptions: All examples assume 1 personal Gmail sender account with a user-configured daily budget of 30 emails/day, operating within Google's rolling quota.*
+
+### Example 1: Standard Fair-Share Split Across 3 Sub-Batches on One Sender
+* **Setup:** 1 Sender (budget: 30/day). Campaign has 90 contacts divided into 3 sub-batches (30 each).
 * **Math:**
-  * Day 1: Target 30 emails. $30 / 3 = 10$ emails per account.
-    * Relay A sends contacts #1–#10.
-    * Relay B sends contacts #11–#20.
-    * Relay C sends contacts #21–#30.
-  * Day 2: Target 30 emails. Relays A, B, C send contacts #31–#40, #41–#50, #51–#60.
-  * Day 3: Relays A, B, C send contacts #61–#70, #71–#80, #81–#90.
-  * Day 4: Relays A, B, C send contacts #91–#100, #101–#110, #111–#120.
-* **Outcome:** Exactly 4 calendar days. Each account sends 40 emails total across 4 days (10/day), maintaining pristine sender reputation well below the 50/day personal Gmail safety threshold.
+  * Day 1: 3 active sub-batches share 30 budget equally ($30 / 3 = 10$ each):
+    * Sub-batch 1 sends contacts #1–#10 (20 remain).
+    * Sub-batch 2 sends contacts #31–#40 (20 remain).
+    * Sub-batch 3 sends contacts #61–#70 (20 remain).
+    * Sender total today: $10 + 10 + 10 = 30$. Sender cap reached.
+  * Day 2: Each sends 10 contacts (#11–#20, #41–#50, #71–#80). Total sent: 30.
+  * Day 3: Each sends 10 contacts (#21–#30, #51–#60, #81–#90). Total sent: 30.
+* **Outcome:** Exactly 3 calendar days. Daily volume never exceeds 30.
 
 ---
 
-### Example 2: Weighted Multi-Account Allocation (4 / 13 / 13)
-* **Setup:** User has 3 relays:
-  * Relay 1: New Gmail account (warm-up phase), user manually caps at 4/day.
-  * Relay 2: Established Gmail account, cap set at 13/day.
-  * Relay 3: Established Gmail account, cap set at 13/day.
-  * Total daily budget: $4 + 13 + 13 = 30\text{/day}$. Campaign has 150 contacts.
+### Example 2: Two Campaigns Sharing One Sender Account
+* **Setup:** 1 Sender (budget: 30/day).
+  * Campaign A ("Designers"): 40 contacts in 2 sub-batches (A1: 20, A2: 20).
+  * Campaign B ("Engineers"): 40 contacts in 2 sub-batches (B1: 20, B2: 20).
 * **Math:**
-  * Day 1: Relay 1 sends 4 contacts (#1–#4). Relay 2 sends 13 contacts (#5–#17). Relay 3 sends 13 contacts (#18–#30). Total sent: 30.
-  * Duration: $150 / 30 = 5$ days.
-* **Outcome:** Relay 1 never exceeds 4 sends/day. Relays 2 & 3 share the heavier load safely without triggering Google spam filters.
+  * Total active sub-batches across sender: 4.
+  * Fair share: $30 / 4 = 7$ with remainder 2.
+    * Sub-batch A1 gets 8 emails.
+    * Sub-batch A2 gets 8 emails. (Campaign A total: 16).
+    * Sub-batch B1 gets 7 emails.
+    * Sub-batch B2 gets 7 emails. (Campaign B total: 14).
+    * Sender total today: $8 + 8 + 7 + 7 = 30$.
+* **Outcome:** Both campaigns make balanced progress concurrently without exceeding the sender's 30/day limit.
 
 ---
 
-### Example 3: Mid-Flight Relay Quota Depletion & Dynamic Redistribution
-* **Setup:** 2 relays (A and B). Daily budget target: 30 emails (15 each).
+### Example 3: New Campaign Joins a Running Campaign on the Same Sender
+* **Setup:** 1 Sender (budget: 30/day).
+* **Day 1:** Campaign 1 runs solo with 1 sub-batch (60 leads). It uses the full 30 daily allowance (leads #1–#30 sent).
+* **Day 2:** User launches Campaign 2 (30 leads, 1 sub-batch) on the same sender.
+  * 2 active campaigns now share the sender: $30 / 2 = 15$ emails each.
+  * Campaign 1 sends leads #31–#45 (15 remain).
+  * Campaign 2 sends leads #1–#15 (15 remain).
+  * Sender total: $15 + 15 = 30$.
+* **Day 3:** Both send their final 15 leads. Total sent: 30.
+* **Outcome:** The running campaign seamlessly shares bandwidth with the new campaign without manual reconfiguration.
+
+---
+
+### Example 4: Dynamic Contact Addition to a Running Campaign
+* **Setup:** 1 Sender (budget: 30/day). Campaign has 60 contacts (Sub-batch 1: 30, Sub-batch 2: 30).
+* **Day 1:** Sends 15 from Sub-batch 1, 15 from Sub-batch 2. Total sent: 30. 30 contacts remain.
+* **Mid-Run Event:** User pastes 30 new leads into Sub-batch 2 on Day 1 evening (Sub-batch 2 now has 45 pending).
+* **Day 2:**
+  * Sub-batch 1 has 15 pending $\to$ allocated 15 emails (Sub-batch 1 completes).
+  * Sub-batch 2 has 45 pending $\to$ allocated 15 emails (30 remain).
+  * Total sent on sender: $15 + 15 = 30$.
+* **Day 3:** Sub-batch 2 is the only remaining active sub-batch $\to$ allocated full 30 emails (Sub-batch 2 completes).
+* **Outcome:** 90 total contacts dispatched in 3 days. Sender never exceeds 30/day.
+
+---
+
+### Example 5: Automatic Cascade Replacement & Manual Replacement Budget Safety
+* **Setup:** 1 Sender (budget: 30/day). Sub-batch of 30 leads is actively dispatching.
+* **Cascade Replacement Execution:**
+  * Lead #12 fails DNS MX check (`NXDOMAIN`). Quarantined to "Not Working".
+  * Engine automatically draws next pending contact (#31) from SAME campaign.
+  * Lead #31 has a malformed syntax error. Quarantined to "Not Working" as well.
+  * Engine automatically draws next pending contact (#32). Lead #32 is valid and delivers.
+  * Day finishes: exactly 30 valid emails sent.
+* **Manual Replacement Action:**
+  * User opens "Not Working" section and enters a new valid email for Lead #12.
+  * Lead #12's replacement is saved and inherits sequence position 12.
+  * **Budget Safety Check:** Since the sender already dispatched 30 emails today, the replacement is **held for tomorrow's send window**. It cannot push today's total to 31.
+* **Audit Trail:**
+  * `#12 (bad domain)` $\to$ auto-replaced by `#31 (syntax error)` $\to$ auto-replaced by `#32 (delivered)`.
+  * `#12` $\to$ manual replacement queued for next day.
+
+---
+
+### Example 6: Apps Script Rolling 24-Hour Quota Ceiling
+* **Setup:** Sender daily limit set to 30. Personal Gmail account (base 100 rolling quota).
 * **Execution:**
-  * Relay A dispatches 15 emails successfully.
-  * Relay B dispatches 8 emails, then Google Apps Script returns `429 Daily User Sending Quota Exceeded`.
-  * Relay B status transitions to `QUOTA_EXCEEDED` for the day. 7 leads from Relay B's sub-batch remain pending.
-* **Engine Decision:**
-  * Relay A already met its 15 daily budget cap. If Relay A's max cap allows, it can absorb up to its limit. If Relay A's cap is hard 15, the remaining 7 leads pause cleanly.
-  * Next morning at 06:00 IST (quota reset), Relay B is reset to `ACTIVE`. The 7 remaining leads are dispatched first, followed by the standard Day 2 allocation. Zero dropped leads.
+  * On Monday at 11:00 AM, first email dispatches. Rolling 24-hour window opens.
+  * Relay reports `MailApp.getRemainingDailyQuota() = 100`.
+  * Day 1 sends 30 emails. Relay quota drops to 70.
+  * On Tuesday at 09:00 AM (22 hours later), scheduled window opens.
+  * Relay reports remaining quota: `70`.
+  * Engine calculates: $\min(\text{budget}=30, \text{remaining}=70) = 30$. Dispatches 30.
+* **Quota Exhaustion Scenario:**
+  * Suppose the user sent 65 emails outside MailOrbit via their personal Gmail.
+  * Relay reports `MailApp.getRemainingDailyQuota() = 12`.
+  * Engine clamps send: $\min(30, 12) = 12$.
+  * Sends 12 emails, then pauses cleanly with status `QUOTA_EXCEEDED` and alerts user:
+    `"Relay rolling quota reached. 18 emails postponed until Google rolling quota replenishes."`
+  * Avoids runtime exception crash.
 
 ---
 
-### Example 4: Dynamic Lead Addition Mid-Campaign
-* **Setup:** Campaign of 60 leads running over 2 days (30/day).
-* **Execution:**
-  * On Day 1 at 14:00 (after 20 emails have dispatched), the user uploads 40 new leads from a conference CSV.
-* **Engine Decision:**
-  * Existing dispatch worker continues uninterrupted.
-  * New leads are assigned `sequence_position` 61 through 100.
-  * Campaign total updates to 100 leads.
-  * Day 1 finishes its scheduled 30 sends (leads #1–#30).
-  * Day 2 sends leads #31–#60.
-  * Day 3 sends leads #61–#90.
-  * Day 4 sends leads #91–#100 (10 emails).
-* **Outcome:** Zero race conditions, zero duplicate emails, smooth schedule recalculation from 2 days to 3.3 days.
+### Example 7: Repeat Rounds with Message Variation & Cooldown
+* **Setup:** 1 Sender (budget: 30/day). Campaign of 90 contacts, 3 repeat rounds, 7-day cooldown.
+* **Round 1:**
+  * Days 1–3: 90 emails sent (30/day).
+  * Completed on Day 3 at 11:30 AM.
+  * Outcomes: 6 replied, 2 opted out, 2 bounced. 10 permanently suppressed.
+  * 80 contacts eligible for Round 2.
+* **Cooldown:** Exactly 7 days from Round 1 completion (Day 3, 11:30 AM to Day 10, 11:30 AM). Zero emails sent.
+* **Round 2 (Day 11):**
+  * Uses Round 2 Follow-up Template / AI follow-up prompt.
+  * Days 11–13: 80 contacts sent (Day 11: 30, Day 12: 30, Day 13: 20).
+  * Completed on Day 13 at 10:15 AM.
+  * 4 replied, 1 opted out. 75 contacts eligible for Round 3.
+* **Cooldown:** Exactly 7 days from Day 13 completion.
+* **Round 3 (Final Round):**
+  * Uses Round 3 Breakup Template.
+  * Days 21–23: 75 contacts sent.
+  * Campaign marks `COMPLETED`. Notification email sent to user.
 
 ---
 
-### Example 5: "Not Working" Quarantine & 1-Click Sequence Replacement
-* **Setup:** Batch of 30 leads.
-  * Lead #14 (`cto@deadstartup.invalid`) fails DNS MX lookup (`NXDOMAIN`).
-  * Lead #22 (`vp@oldcorp.com`) returns SMTP `550 5.1.1 User unknown`.
-* **Engine Decision:**
-  * Leads #14 and #22 are immediately tagged `is_not_working = TRUE`, `status = "INACTIVE"` and moved to "Not Working" folder.
-  * Immediate auto-topup pulls Lead #31 and Lead #32 from the pending pool so the day's quota of 30 successful deliveries is met.
-  * Later, user clicks "Replace" on Lead #14 in the Not Working folder and enters `cto_new@realcompany.com`.
-  * `cto_new@realcompany.com` is inserted with `sequence_position = 14`, inheriting priority.
-  * Audit row created in `contact_replacements`: `original: cto@deadstartup.invalid -> replaced_by: cto_new@realcompany.com | reason: Replaced bad domain`.
+## 6. Milestone Split: M2a vs M2b
+
+To ensure zero downtime, thorough test verification, and clean delivery, Milestone 2 is split into two phases:
+
+### Phase M2a: Backend Engine, Data Models, Scheduler & Migration
+* **Scope:**
+  1. Alembic migration adding `campaigns` and `contact_replacements` tables, and adding `campaign_id`, `sequence_position`, `is_not_working`, `replaced_by_contact_id` to existing tables.
+  2. Non-destructive backfill: Existing batches/contacts assigned to a default Campaign.
+  3. Single-sender fair-share auto-balancer algorithm.
+  4. Apps Script rolling quota reader (`getRemainingDailyQuota`) and pause handler.
+  5. Schedule cache & calendar engine (active days, skip dates, stop date, Today/Tomorrow).
+  6. "Not Working" auto-cascade replacement logic and audit trail.
+  7. Repeat rounds cooldown and suppression filter.
+  8. Size 1..N ad-hoc send path.
+* **Test Plan List (M2a):**
+  * `test_m2a_alembic_migration_zero_data_loss`: Verifies schema updates without dropping existing data.
+  * `test_m2a_fair_share_sub_batch_balancer`: Tests 30 budget split across 3 sub-batches (10/10/10) and uneven sub-batches.
+  * `test_m2a_two_campaigns_sharing_one_sender`: Tests budget division across multiple campaigns on one sender.
+  * `test_m2a_apps_script_rolling_quota_clamp`: Verifies engine clamps sending when remaining quota $< 30$.
+  * `test_m2a_dynamic_lead_ingestion`: Verifies mid-run appended contacts receive incremented sequence numbers.
+  * `test_m2a_cascade_replacement`: Verifies a failed replacement draws the next candidate and writes audit rows.
+  * `test_m2a_manual_replacement_respects_daily_budget`: Verifies manual replacement cannot exceed 30/day limit.
+  * `test_m2a_repeat_rounds_suppression`: Verifies replies, bounces, and unsubscribes are excluded from Round 2.
+  * `test_m2a_repeat_rounds_cooldown`: Verifies round cannot fire before 7-day cooldown from previous completion.
+  * `test_m2a_size_1_adhoc_send`: Verifies single send executes through standard pipeline.
+* **Live Site Checks (M2a):**
+  * Database schema verified in Neon Console with zero broken tables.
+  * API endpoints operational: `POST /api/v1/campaigns`, `POST /api/v1/campaigns/{id}/auto-balance`, `GET /api/v1/campaigns/{id}/not-working`.
+  * `/tick` answers `"standby"` with zero database queries when nothing is due.
+
+### Phase M2b: User Interface, Screens & Workflows
+* **Scope:**
+  1. **Campaign Overview & Creation Modal:** Start date picker with "Today" and "Tomorrow" shortcuts, skip dates multi-select, stop date, daily budget input with $>30$ warning modal.
+  2. **Sub-Batch Manager:** Toggle between Auto-partition and Manual creation. Drag/move contacts between sub-batches.
+  3. **Direct Paste Area:** Text box for comma- or newline-separated email lists.
+  4. **One-Click Auto-Balance Button:** Visual preview of daily distribution across sub-batches.
+  5. **"Not Working" Quarantine Section:** Table of failed leads showing failure reason (NXDOMAIN, syntax, bounce), replacement history pill, and "Replace" modal.
+  6. **Repeat Rounds Configuration Tab:** Cooldown gap selector, max rounds cap, and Round 2/3 message angle selector.
+  7. **Enhanced Dashboard Metrics Strip:** Scheduled, Running, Completed, Failed/Paused counts.
+* **Test Plan List (M2b):**
+  * Unit tests for frontend state transitions and date helpers.
+  * Playwright E2E browser tests:
+    * Create a campaign with Today shortcut $\to$ paste 5 contacts $\to$ click Auto-Balance.
+    * Move a contact from Sub-batch 1 to Sub-batch 2.
+    * Trigger replacement on a quarantined lead in "Not Working" tab.
+    * Configure budget $>30$ and verify safety warning modal displays.
+* **Live Site Checks (M2b):**
+  * Live navigation in browser at `/`.
+  * Smooth UI with zero hydration errors or console warnings.
+  * Visual inspection of "Not Working" tab and replacement audit modal.
 
 ---
 
-### Example 6: Multi-Round Follow-up Campaign with Response Suppression
-* **Setup:** 100 contacts, `repeat_rounds = 3`, `min_round_gap_days = 7`.
-* **Execution:**
-  * **Round 1:** 100 emails sent.
-    * 5 recipients reply.
-    * 3 recipients click unsubscribe (`UNSUBSCRIBED`).
-    * 2 emails hard bounce (`BOUNCED`).
-    * 90 recipients do not reply.
-  * **Cooldown Period:** Engine enters 7-day standby window. Zero emails sent for this campaign during the 7 days.
-  * **Round 2 (Day 8):**
-    * Suppression filter runs: 5 replies + 3 unsubscribed + 2 bounced = 10 permanently suppressed.
-    * Round 2 queues exactly 90 contacts with Follow-up Subject & Template ("Following up on my previous note...").
-    * 4 recipients reply, 1 unsubscribes.
-  * **Cooldown Period:** Another 7-day cooldown.
-  * **Round 3 (Day 16):**
-    * Suppression filter runs: 85 eligible contacts queued for final round.
-  * **Finish (Day 19):** All 3 rounds complete. Campaign status transitions to `COMPLETED`. User receives final report email summarizing 100 initial leads, 9 total replies (9% reply rate), and 0 spam complaints.
-
----
-
-### Example 7: Ad-Hoc Size 1 Single Send
-* **Setup:** User discovers a high-priority recruiter on LinkedIn and wants to send one email immediately without adding them to a bulk batch.
-* **Execution:**
-  * User opens "Quick Send", enters Recruiter email, name, and JD snippet, and clicks "Send Now".
-  * Engine creates ephemeral ad-hoc send job ($N = 1$).
-  * Pre-send check resolves MX records in 45ms.
-  * AI Personalizer calls Gemini with user's BYOK key to generate tailored pitch in 1.2s.
-  * Dispatches via user's primary Apps Script relay over HTTPS:443.
-  * Audit log recorded in `messages` and `send_events`.
-* **Outcome:** Delivered in under 3 seconds with identical encryption, logging, and security as a 300-lead enterprise batch.
-
----
-
-## 5. Deliverability Safety Risk Matrix
-
-| Configuration | Risk Level | Engine Action / Warning |
-| :--- | :--- | :--- |
-| $\le 30$ emails/day per personal account | **SAFE** | Green status. Optimal delivery rate and Gmail inbox placement. |
-| $31 - 50$ emails/day per personal account | **MODERATE** | Informational notice: Recommended only for accounts aged $>3$ months. |
-| $> 50$ emails/day per personal account | **HIGH RISK** | Prominent warning modal required before saving: *"High Deliverability Risk: Google strictly monitors personal accounts sending >50/day. High velocity risks spam flagging, temporary rate limits, or account suspension. Consider connecting an additional relay."* |
-| $> 100$ emails/day total without warm-up | **CRITICAL** | Enforces gradual warm-up ramp (Day 1: 20, Day 2: 30, Day 3: 45...). |
-
----
-
-## 6. M2 Test Plan (To Be Executed After User Approval)
-
-1. **Test M2-T1 (Campaign Model & Migration):** Verify Alembic migration creates `campaigns`, `contact_replacements`, adds new columns to `contacts` and `sender_relays`, and backfills existing data with zero data loss.
-2. **Test M2-T2 (Fair-Share Budget Balancer):** Unit test distributing 30 emails across 3 relays with equal caps (10/10/10) and custom caps (4/13/13).
-3. **Test M2-T3 (Dynamic Mid-Run Addition):** Add 20 contacts to an active campaign; assert sequence order is preserved and worker dispatches all 20 after current batch.
-4. **Test M2-T4 (Repeat Rounds Suppression):** Simulate 10 contacts with 1 reply and 1 bounce; verify Round 2 queues exactly 8 contacts.
-5. **Test M2-T5 (Not Working Quarantine & Replacement):** Mock DNS NXDOMAIN failure; assert contact moves to Not Working; trigger replacement API; assert replacement inherits sequence position and audit trail is recorded.
-6. **Test M2-T6 (Size 1 Ad-Hoc Send):** Execute single send endpoint; verify end-to-end delivery through mock relay with AI personalization.
-7. **Test M2-T7 (Personal Account Cap Warning):** Test that updating sender relay budget to $>50$ returns validation warning response.
-
----
-**END OF SPECIFICATION — WAITING FOR USER "GO" BEFORE COMMENCING CODE IMPLEMENTATION**
+**END OF REVISED SPECIFICATION — STOPPED AND WAITING FOR USER APPROVAL BEFORE COMMENCING M2a CODE**

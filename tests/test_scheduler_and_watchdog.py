@@ -171,3 +171,63 @@ def test_api_tick_watchdog_endpoint():
     assert "jobs_processed" in data
     assert isinstance(data["batches_queued"], int)
     assert isinstance(data["jobs_processed"], int)
+
+
+def test_schedule_cache_never_misses_due_run():
+    """
+    Verifies that the in-memory schedule cache cannot miss a due run:
+    1. A batch created or edited whose send time has arrived/passed today returns is_tick_due() == True.
+    2. After a simulated container restart (fresh ScheduleCache refreshed from DB), is_tick_due() == True.
+    3. Future runs return False until due time arrives.
+    """
+    from apps.api.services.schedule_cache import ScheduleCache
+    db_engine = create_db_engine(settings.DATABASE_URL)
+    session_factory = create_session_factory(db_engine)
+
+    cache = ScheduleCache()
+
+    with session_factory() as session:
+        user, purpose = create_test_user_and_purpose(session, tz_name="Asia/Kolkata")
+        # 2026-10-28 05:00:00 UTC is Wednesday 10:30:00 AM IST
+        ref_wed_1030 = datetime(2026, 10, 28, 5, 0, 0, tzinfo=timezone.utc)
+
+        # Batch scheduled for Wednesday at 10:00 AM IST (30 minutes in the past!)
+        past_batch = Batch(
+            user_id=user.id,
+            purpose_id=purpose.id,
+            name="Past Due Batch",
+            size=10,
+            position=1,
+            scheduled_days=["wed"],
+            scheduled_time="10:00",
+            status="PENDING",
+        )
+        session.add(past_batch)
+        session.commit()
+
+        # 1. Refresh cache after creation at Wednesday 10:30
+        cache.refresh_from_db(session, user_id=user.id, now_utc=ref_wed_1030)
+
+        # Must report tick due immediately at 10:30 because 10:00 has arrived!
+        assert cache.is_tick_due(now_utc=ref_wed_1030) is True
+
+        # 2. Simulate server restart: completely fresh in-memory cache instance
+        restarted_cache = ScheduleCache()
+        assert restarted_cache.next_due_at is None
+        restarted_cache.refresh_from_db(session, user_id=user.id, now_utc=ref_wed_1030)  # Lifespan on startup
+
+        # Must still report tick due immediately! Zero missed runs.
+        assert restarted_cache.is_tick_due(now_utc=ref_wed_1030) is True
+
+        # 3. If batch is updated to tomorrow Thursday 10:00 AM IST
+        past_batch.scheduled_days = ["thu"]
+        session.commit()
+        cache.refresh_from_db(session, user_id=user.id, now_utc=ref_wed_1030)
+
+        # On Wednesday at 10:30, a Thursday batch is NOT due yet (standby)
+        assert cache.is_tick_due(now_utc=ref_wed_1030) is False
+
+        # When Thursday 10:00 arrives (2026-10-29 04:30:00 UTC):
+        thu_1000 = datetime(2026, 10, 29, 4, 30, 0, tzinfo=timezone.utc)
+        assert cache.is_tick_due(now_utc=thu_1000) is True
+

@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     CLOUDINARY_API_KEY: str | None = None
     CLOUDINARY_API_SECRET: str | None = None
 
+    TRUSTED_PROXY_COUNT: int = 1
+    IS_BEHIND_CLOUDFLARE: bool = False
+
     model_config = SettingsConfigDict(
         env_file=(".env.local", ".env"),
         env_file_encoding="utf-8",
