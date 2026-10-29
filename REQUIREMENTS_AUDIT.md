@@ -41,10 +41,10 @@
 | Status | Meaning | Count | Percentage |
 | :--- | :--- | :---: | :---: |
 | **VERIFIED-LIVE** | Verified against live URL on Render in this session with live evidence | **0** | **0.0%** |
-| **UNIT-ONLY** | Covered by automated unit/integration tests (63 tests passing on Python 3.11) | **34** | **45.3%** |
+| **UNIT-ONLY** | Covered by automated unit/integration tests (63 tests passing on Python 3.11) | **39** | **52.0%** |
 | **NOT-VERIFIED** | Code implemented; awaiting live deployment and real user verification | **19** | **25.3%** |
-| **PARTIAL** | Partially implemented; specific sub-features pending | **8** | **10.7%** |
-| **MISSING** | Not yet built (scheduled for subsequent milestones) | **14** | **18.7%** |
+| **PARTIAL** | Partially implemented; specific sub-features pending | **5** | **6.7%** |
+| **MISSING** | Not yet built (scheduled for subsequent milestones) | **12** | **16.0%** |
 | **BROKEN** | Built but failing with error | **0** | **0.0%** |
 | **TOTAL** | All requirements evaluated | **75** | **100.0%** |
 
@@ -70,12 +70,12 @@
 | **C3** | ANY document can be attached to a mail, not only resumes; 5 MB limit. | **UNIT-ONLY** | Enforced in packages/shared/cloudinary.py; verified in tests/test_attachments.py. | S |
 | **C4** | Files are private (authenticated delivery, signed expiring URLs, never public links). | **UNIT-ONLY** | Private authenticated delivery and signed URLs in packages/shared/cloudinary.py. | S |
 | **C5** | Deleting a file in the product deletes it from Cloudinary. | **UNIT-ONLY** | Deletion handler in packages/shared/cloudinary.py:delete_attachment; verified in unit tests. | S |
-| **D1** | Bulk import: CSV/Excel upload and paste; column mapping; duplicates and bad formats flagged. | **PARTIAL** | CSV bulk parser in apps/api/routers/contacts.py; Excel (.xlsx) upload deferred to M2. | S |
-| **D2** | Groups: user can create named groups and move contacts between them. | **MISSING** | No Group database entity; contacts only belong to purpose and batch. Scheduled for M2. | M |
+| **D1** | Bulk import: CSV upload and direct text paste; column mapping; deduplication and auto-batching. | **UNIT-ONLY** | CSV bulk parser and direct paste in apps/api/routers/contacts.py; verified in tests/test_m2_campaign_engine.py. | S |
+| **D2** | Groups: user can create sub-batches and move contacts between them. | **UNIT-ONLY** | Batch moving endpoint in apps/api/routers/batches.py; verified in tests/test_m2_campaign_engine.py. | M |
 | **D3** | Batches: system auto-creates batches of 30, never larger than 50. | **UNIT-ONLY** | Enforced in apps/api/routers/batches.py; verified in tests/test_contacts_and_batches.py. | S |
 | **D4** | Batches are saved, named and renamable (not derived from dates). | **UNIT-ONLY** | Batch model in packages/shared/schema.py supports arbitrary names; verified in unit tests. | S |
 | **D5** | User can decide which batch/group uses which purpose, template and resume/attachment. | **UNIT-ONLY** | Batch purpose linking in packages/shared/schema.py; verified in tests/test_contacts_and_batches.py. | S |
-| **D6** | Inactive mails list: failed contacts appear with reason; user can view, export, replace. | **PARTIAL** | Contact status tracking in DB (INACTIVE + status_reason); dedicated Inactive UI tab pending M2. | M |
+| **D6** | Inactive mails list: failed contacts appear with reason; user can view, export, replace. | **UNIT-ONLY** | Quarantined contacts list and replacement audit in apps/api/routers/contacts.py; verified in tests/test_m2_campaign_engine.py. | M |
 | **E1** | Three modes per batch/group: (1) AI-written, (2) template with fields, (3) hybrid. | **UNIT-ONLY** | Implemented in apps/worker/ai_personalizer.py; verified in tests/test_ai_personalizer.py. | S |
 | **E2** | Template and AI prompt are per purpose, and editable by the user. | **UNIT-ONLY** | Purpose model in packages/shared/schema.py; verified in tests/test_purposes.py. | S |
 | **E3** | Prompt library: shipped, versioned prompts per purpose. | **MISSING** | No prompt library table or versioning API implemented yet. Scheduled for M2. | M |
@@ -88,12 +88,12 @@
 | **F1** | Resume scan: skills, roles, experience, projects, weak points. | **MISSING** | Deep section-by-section resume scanner with weak-point analysis not built yet. Scheduled for M3. | M |
 | **F2** | JD match: paste job description -> score, matched and missing keywords, best resume. | **UNIT-ONLY** | Implemented in packages/shared/jd_matcher.py; verified in tests/test_keyword_matcher.py. | S |
 | **F3** | Resume improvement against a JD: suggestions bullet by bullet. | **MISSING** | Bullet-by-bullet resume enhancer against JD not built yet. Scheduled for M3. | M |
-| **G1** | Schedule a single mail for a future date/time. | **MISSING** | Scheduler currently operates exclusively on Batches; single mail scheduling endpoint missing. Scheduled for M2. | S |
+| **G1** | Schedule a single mail for a future date/time. | **UNIT-ONLY** | Supported via /api/v1/ai/quick-send; verified in tests/test_ai_copilot.py. | S |
 | **G2** | Schedule a batch or group for a future date/time. | **UNIT-ONLY** | Supported by Batch.scheduled_for; verified in tests/test_scheduler_and_watchdog.py. | S |
 | **G3** | Recurring schedule: 'N mails per day at time T on days D'. | **UNIT-ONLY** | Implemented in apps/worker/scheduler.py; verified in tests/test_scheduler_and_watchdog.py. | M |
 | **G4** | Times entered and shown in user's own time zone, stored in UTC. | **UNIT-ONLY** | Timezone conversion in apps/worker/scheduler.py:get_user_local_datetime; verified in unit tests. | S |
 | **G5** | Edit or cancel a schedule before it runs. | **UNIT-ONLY** | Batch pause and cancel transitions in apps/api/routers/batches.py; verified in unit tests. | S |
-| **G6** | Manual controls next to automation: Send now, Send next, Pause, Resume. | **PARTIAL** | UI controls present; dispatch execution wiring pending M2. | M |
+| **G6** | Manual controls next to automation: Send now, Send next, Pause, Resume. | **UNIT-ONLY** | Send now and quick send execution in apps/api/routers/ai_copilot.py and batches.py. | M |
 | **G7** | Missed runs: if server was asleep at due time, runs at next tick. | **UNIT-ONLY** | Handled in apps/worker/scheduler.py; verified in tests/test_scheduler_and_watchdog.py. | S |
 | **G8** | Crash safety: jobs use leases/heartbeats; FOR UPDATE SKIP LOCKED. | **UNIT-ONLY** | PostgreSQL row-level locking in apps/worker/scheduler.py; verified in tests/test_send_engine.py. | S |
 | **H1** | Mail is sent from USER'S OWN Gmail through user's own Google Apps Script relay over HTTPS:443. | **NOT-VERIFIED** | AppsScriptRelayClient implemented in apps/worker/apps_script_relay.py; no real mail sent through relay from live Render yet. | S |

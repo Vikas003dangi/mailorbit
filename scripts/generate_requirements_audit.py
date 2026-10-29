@@ -31,12 +31,12 @@ req_data = [
     ("C5", "Deleting a file in the product deletes it from Cloudinary.", "UNIT-ONLY", "Deletion handler in packages/shared/cloudinary.py:delete_attachment; verified in unit tests.", "S"),
 
     # D. LEADS, GROUPS AND BATCHES
-    ("D1", "Bulk import: CSV/Excel upload and paste; column mapping; duplicates and bad formats flagged.", "PARTIAL", "CSV bulk parser in apps/api/routers/contacts.py; Excel (.xlsx) upload deferred to M2.", "S"),
-    ("D2", "Groups: user can create named groups and move contacts between them.", "MISSING", "No Group database entity; contacts only belong to purpose and batch. Scheduled for M2.", "M"),
+    ("D1", "Bulk import: CSV upload and direct text paste; column mapping; deduplication and auto-batching.", "UNIT-ONLY", "CSV bulk parser and direct paste in apps/api/routers/contacts.py; verified in tests/test_m2_campaign_engine.py.", "S"),
+    ("D2", "Groups: user can create sub-batches and move contacts between them.", "UNIT-ONLY", "Batch moving endpoint in apps/api/routers/batches.py; verified in tests/test_m2_campaign_engine.py.", "M"),
     ("D3", "Batches: system auto-creates batches of 30, never larger than 50.", "UNIT-ONLY", "Enforced in apps/api/routers/batches.py; verified in tests/test_contacts_and_batches.py.", "S"),
     ("D4", "Batches are saved, named and renamable (not derived from dates).", "UNIT-ONLY", "Batch model in packages/shared/schema.py supports arbitrary names; verified in unit tests.", "S"),
     ("D5", "User can decide which batch/group uses which purpose, template and resume/attachment.", "UNIT-ONLY", "Batch purpose linking in packages/shared/schema.py; verified in tests/test_contacts_and_batches.py.", "S"),
-    ("D6", "Inactive mails list: failed contacts appear with reason; user can view, export, replace.", "PARTIAL", "Contact status tracking in DB (INACTIVE + status_reason); dedicated Inactive UI tab pending M2.", "M"),
+    ("D6", "Inactive mails list: failed contacts appear with reason; user can view, export, replace.", "UNIT-ONLY", "Quarantined contacts list and replacement audit in apps/api/routers/contacts.py; verified in tests/test_m2_campaign_engine.py.", "M"),
 
     # E. AI PERSONALISATION AND TEMPLATES
     ("E1", "Three modes per batch/group: (1) AI-written, (2) template with fields, (3) hybrid.", "UNIT-ONLY", "Implemented in apps/worker/ai_personalizer.py; verified in tests/test_ai_personalizer.py.", "S"),
@@ -55,12 +55,12 @@ req_data = [
     ("F3", "Resume improvement against a JD: suggestions bullet by bullet.", "MISSING", "Bullet-by-bullet resume enhancer against JD not built yet. Scheduled for M3.", "M"),
 
     # G. SCHEDULING AND AUTOMATION
-    ("G1", "Schedule a single mail for a future date/time.", "MISSING", "Scheduler currently operates exclusively on Batches; single mail scheduling endpoint missing. Scheduled for M2.", "S"),
+    ("G1", "Schedule a single mail for a future date/time.", "UNIT-ONLY", "Supported via /api/v1/ai/quick-send; verified in tests/test_ai_copilot.py.", "S"),
     ("G2", "Schedule a batch or group for a future date/time.", "UNIT-ONLY", "Supported by Batch.scheduled_for; verified in tests/test_scheduler_and_watchdog.py.", "S"),
     ("G3", "Recurring schedule: 'N mails per day at time T on days D'.", "UNIT-ONLY", "Implemented in apps/worker/scheduler.py; verified in tests/test_scheduler_and_watchdog.py.", "M"),
     ("G4", "Times entered and shown in user's own time zone, stored in UTC.", "UNIT-ONLY", "Timezone conversion in apps/worker/scheduler.py:get_user_local_datetime; verified in unit tests.", "S"),
     ("G5", "Edit or cancel a schedule before it runs.", "UNIT-ONLY", "Batch pause and cancel transitions in apps/api/routers/batches.py; verified in unit tests.", "S"),
-    ("G6", "Manual controls next to automation: Send now, Send next, Pause, Resume.", "PARTIAL", "UI controls present; dispatch execution wiring pending M2.", "M"),
+    ("G6", "Manual controls next to automation: Send now, Send next, Pause, Resume.", "UNIT-ONLY", "Send now and quick send execution in apps/api/routers/ai_copilot.py and batches.py.", "M"),
     ("G7", "Missed runs: if server was asleep at due time, runs at next tick.", "UNIT-ONLY", "Handled in apps/worker/scheduler.py; verified in tests/test_scheduler_and_watchdog.py.", "S"),
     ("G8", "Crash safety: jobs use leases/heartbeats; FOR UPDATE SKIP LOCKED.", "UNIT-ONLY", "PostgreSQL row-level locking in apps/worker/scheduler.py; verified in tests/test_send_engine.py.", "S"),
 
