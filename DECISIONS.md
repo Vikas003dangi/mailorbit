@@ -36,3 +36,4 @@ This separation introduced multiple production failure modes:
 
 5. **Decommission GitHub Pages**:
    - GitHub Pages deployment workflow has been removed from the user-facing pipeline. All users now access the unified Render service.
+

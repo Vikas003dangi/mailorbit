@@ -17,3 +17,4 @@ def test_root_serves_static_index():
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
     assert "MailOrbit" in response.text
+

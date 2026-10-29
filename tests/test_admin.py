@@ -57,3 +57,31 @@ def test_admin_system_health_endpoint(monkeypatch):
     assert data["status"] in ["healthy", "degraded"]
     assert "database" in data
     assert "host" in data
+
+
+def test_admin_capabilities(monkeypatch):
+    test_super_email = f"superuser_caps_{uuid.uuid4().hex[:6]}@example.com"
+    import apps.api.dependencies
+    monkeypatch.setattr(apps.api.dependencies, "SUPERUSER_EMAILS", {test_super_email})
+
+    reg = client.post("/api/v1/auth/signup", json={"email": test_super_email, "password": "SuperSecure123!"})
+    assert reg.status_code == 201
+    token = reg.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # 1. List users
+    users_res = client.get("/api/v1/admin/users", headers=headers)
+    assert users_res.status_code == 200
+    users_data = users_res.json()
+    assert isinstance(users_data, list)
+    assert len(users_data) >= 1
+
+    # 2. List batches
+    batches_res = client.get("/api/v1/admin/batches", headers=headers)
+    assert batches_res.status_code == 200
+    assert isinstance(batches_res.json(), list)
+
+    # 3. Trigger tick
+    tick_res = client.post("/api/v1/admin/trigger-tick", headers=headers)
+    assert tick_res.status_code == 200
+    assert "status" in tick_res.json()

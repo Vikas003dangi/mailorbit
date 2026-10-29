@@ -44,77 +44,86 @@ const DEFAULT_API_URL = "";
 // Superuser accounts with full administrative control deck access
 const SUPERUSER_EMAILS = ["vikassdangi@gmail.com", "vd19055@gmail.com"];
 
-// Orbital Logo Component
-function OrbitalLogo({ size = 36 }: { size?: number }) {
+// Orbital Logo Component - Sleek futuristic celestial engine
+function OrbitalLogo({ size = 40 }: { size?: number }) {
   const gradientId = useId();
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-      <svg
-        width={size}
-        height={size}
-        viewBox="0 0 100 100"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-        style={{ filter: "drop-shadow(0 0 12px rgba(56, 189, 248, 0.45))" }}
-      >
-        <defs>
-          <linearGradient id={`orbitGrad_${gradientId}`} x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#38bdf8" />
-            <stop offset="50%" stopColor="#818cf8" />
-            <stop offset="100%" stopColor="#c084fc" />
-          </linearGradient>
-          <radialGradient id={`coreGrad_${gradientId}`} cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="#67e8f9" />
-            <stop offset="40%" stopColor="#0284c7" />
-            <stop offset="100%" stopColor="#1e1b4b" />
-          </radialGradient>
-        </defs>
+    <div style={{ display: "flex", alignItems: "center", gap: "12px", cursor: "pointer" }}>
+      <div style={{ position: "relative", width: size, height: size, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <svg
+          width={size}
+          height={size}
+          viewBox="0 0 100 100"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          style={{ filter: "drop-shadow(0 0 16px rgba(56, 189, 248, 0.55))" }}
+        >
+          <defs>
+            <linearGradient id={`grad_outer_${gradientId}`} x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#38bdf8" />
+              <stop offset="50%" stopColor="#818cf8" />
+              <stop offset="100%" stopColor="#c084fc" />
+            </linearGradient>
+            <radialGradient id={`grad_core_${gradientId}`} cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stopColor="#67e8f9" />
+              <stop offset="45%" stopColor="#0284c7" />
+              <stop offset="100%" stopColor="#0f172a" />
+            </radialGradient>
+          </defs>
 
-        {/* Outer Orbital Ring */}
-        <ellipse
-          cx="50"
-          cy="50"
-          rx="44"
-          ry="16"
-          stroke={`url(#orbitGrad_${gradientId})`}
-          strokeWidth="2.5"
-          strokeDasharray="6 3"
-          transform="rotate(-28 50 50)"
-          opacity="0.85"
-        />
+          {/* Outer Orbital Ring */}
+          <ellipse
+            cx="50"
+            cy="50"
+            rx="45"
+            ry="18"
+            stroke={`url(#grad_outer_${gradientId})`}
+            strokeWidth="3"
+            strokeDasharray="8 4"
+            transform="rotate(-28 50 50)"
+          />
 
-        {/* Inner Counter Orbital Ring */}
-        <ellipse
-          cx="50"
-          cy="50"
-          rx="40"
-          ry="14"
-          stroke="#38bdf8"
-          strokeWidth="1.5"
-          transform="rotate(35 50 50)"
-          opacity="0.55"
-        />
+          {/* Inner Counter Planetary Ring */}
+          <ellipse
+            cx="50"
+            cy="50"
+            rx="39"
+            ry="13"
+            stroke="#38bdf8"
+            strokeWidth="1.8"
+            transform="rotate(38 50 50)"
+            opacity="0.75"
+          />
 
-        {/* Core Celestial Sphere */}
-        <circle cx="50" cy="50" r="17" fill={`url(#coreGrad_${gradientId})`} />
-        <circle cx="45" cy="45" r="4" fill="#ffffff" opacity="0.6" />
+          {/* Core Celestial Sphere */}
+          <circle cx="50" cy="50" r="19" fill={`url(#grad_core_${gradientId})`} />
+          <circle cx="44" cy="44" r="5" fill="#ffffff" opacity="0.8" />
 
-        {/* Orbiting Satellite Data Nodes */}
-        <circle cx="82" cy="36" r="3.5" fill="#38bdf8" />
-        <circle cx="16" cy="62" r="2.8" fill="#c084fc" />
-        <circle cx="68" cy="74" r="2.5" fill="#818cf8" />
-      </svg>
+          {/* Dynamic Stellar Pulse Nodes */}
+          <circle cx="85" cy="33" r="4" fill="#38bdf8" style={{ filter: "drop-shadow(0 0 8px #38bdf8)" }} />
+          <circle cx="15" cy="65" r="3.2" fill="#c084fc" style={{ filter: "drop-shadow(0 0 8px #c084fc)" }} />
+          <circle cx="68" cy="76" r="3" fill="#818cf8" style={{ filter: "drop-shadow(0 0 6px #818cf8)" }} />
+
+          {/* Aerodynamic Intersecting Vector */}
+          <path
+            d="M50 35 L53 47 L65 50 L54 54 L56 65 L48 56 L37 60 L42 51 L33 47 L45 45 Z"
+            fill="#ffffff"
+            opacity="0.95"
+          />
+        </svg>
+      </div>
+
       <div>
         <div style={{ display: "flex", alignItems: "baseline", gap: "2px" }}>
-          <span style={{ fontSize: "1.35rem", fontWeight: 800, letterSpacing: "-0.03em", color: "#ffffff" }}>
+          <span style={{ fontSize: "1.42rem", fontWeight: 900, letterSpacing: "-0.04em", color: "#ffffff" }}>
             Mail
           </span>
           <span
             style={{
-              fontSize: "1.35rem",
-              fontWeight: 800,
-              letterSpacing: "-0.03em",
-              background: "linear-gradient(135deg, #38bdf8 0%, #818cf8 100%)",
+              fontSize: "1.42rem",
+              fontWeight: 900,
+              letterSpacing: "-0.04em",
+              background: "linear-gradient(135deg, #38bdf8 0%, #818cf8 50%, #c084fc 100%)",
               WebkitBackgroundClip: "text",
               WebkitTextFillColor: "transparent",
             }}
@@ -122,8 +131,11 @@ function OrbitalLogo({ size = 36 }: { size?: number }) {
             Orbit
           </span>
         </div>
-        <div style={{ fontSize: "0.68rem", color: "#94a3b8", fontWeight: 500, letterSpacing: "0.04em", marginTop: "-2px" }}>
-          AUTONOMOUS OUTREACH
+        <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "-3px" }}>
+          <span style={{ width: "5px", height: "5px", borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 6px #22c55e" }} />
+          <span style={{ fontSize: "0.64rem", color: "#94a3b8", fontWeight: 700, letterSpacing: "0.08em" }}>
+            AUTONOMOUS OUTREACH
+          </span>
         </div>
       </div>
     </div>
@@ -223,9 +235,15 @@ export default function MailOrbitDashboard() {
   const [loadingData, setLoadingData] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
-  // Superuser Admin Data
+  // Superuser Admin Data & Abilities
   const [adminStats, setAdminStats] = useState<any>(null);
   const [adminSystem, setAdminSystem] = useState<any>(null);
+  const [adminUsers, setAdminUsers] = useState<any[]>([]);
+  const [adminBatches, setAdminBatches] = useState<any[]>([]);
+  const [adminTickResult, setAdminTickResult] = useState<any>(null);
+  const [adminEgressResult, setAdminEgressResult] = useState<any>(null);
+  const [adminActionLoading, setAdminActionLoading] = useState<string | null>(null);
+  const [adminNotice, setAdminNotice] = useState<string | null>(null);
   const [loadingAdmin, setLoadingAdmin] = useState(false);
 
   // Job Description Matching State (M8)
@@ -298,9 +316,9 @@ export default function MailOrbitDashboard() {
     setToken("demo_token");
     setCurrentUser({
       id: "demo-user-id",
-      email: "demo.engineer@mailorbit.io",
+      email: "demo.guest@mailorbit.io",
       timezone: "Asia/Kolkata",
-      is_superuser: true,
+      is_superuser: false,
     });
     setBatches(DEMO_BATCHES);
     setContacts(DEMO_CONTACTS);
@@ -390,40 +408,29 @@ export default function MailOrbitDashboard() {
     }
   };
 
+  const isSuperuser = Boolean(
+    !isDemoMode &&
+    token &&
+    currentUser?.email &&
+    SUPERUSER_EMAILS.includes(currentUser.email.toLowerCase())
+  );
+
   const loadAdminData = async () => {
-    if (isDemoMode) {
-      setAdminStats({
-        authenticated_as: "demo.engineer@mailorbit.io",
-        is_superuser: true,
-        timestamp: new Date().toISOString(),
-        totals: {
-          users: 12,
-          batches: 28,
-          contacts: 384,
-          sender_relays: 8,
-          ai_keys: 14,
-          attachments: 6,
-        },
-        contacts_by_status: { SENT: 210, QUEUED: 60, PENDING: 104, BOUNCED: 8, REPLACED: 8 },
-        batches_by_status: { ACTIVE: 4, SCHEDULED: 8, COMPLETED: 14, PAUSED: 2 },
-      });
-      setAdminSystem({
-        status: "healthy",
-        database: { provider: "Neon Serverless PostgreSQL 16 (Ohio)", connected: true },
-        host: { platform: "Render Cloud Container", region: "Oregon / US-West" },
-        egress: { protocol: "Google Apps Script HTTPS Relay (443)", circuit_breaker: "10% Batch Safety Pause active" },
-      });
-      return;
-    }
+    if (!isSuperuser) return;
 
     setLoadingAdmin(true);
+    setAdminNotice(null);
     try {
-      const [statsRes, sysRes] = await Promise.all([
+      const [statsRes, sysRes, usersRes, batchesRes] = await Promise.all([
         apiFetch("/api/v1/admin/stats"),
         apiFetch("/api/v1/admin/system"),
+        apiFetch("/api/v1/admin/users"),
+        apiFetch("/api/v1/admin/batches"),
       ]);
       if (statsRes.ok) setAdminStats(await statsRes.json());
       if (sysRes.ok) setAdminSystem(await sysRes.json());
+      if (usersRes.ok) setAdminUsers(await usersRes.json());
+      if (batchesRes.ok) setAdminBatches(await batchesRes.json());
     } catch (err) {
       console.error("Error loading admin data", err);
     } finally {
@@ -431,11 +438,68 @@ export default function MailOrbitDashboard() {
     }
   };
 
-  useEffect(() => {
-    if (activeTab === "admin" && (currentUser?.is_superuser || isDemoMode)) {
-      loadAdminData();
+  const handleToggleUserStatus = async (userId: string) => {
+    if (!isSuperuser) return;
+    setAdminActionLoading(`toggle-${userId}`);
+    try {
+      const res = await apiFetch(`/api/v1/admin/users/${userId}/toggle-status`, { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        setAdminNotice(`User account ${data.email} is now ${data.is_active ? "Active" : "Suspended"}`);
+        const usersRes = await apiFetch("/api/v1/admin/users");
+        if (usersRes.ok) setAdminUsers(await usersRes.json());
+      } else {
+        setAdminNotice(`Action failed: ${data.detail || "Could not update status"}`);
+      }
+    } catch (err: any) {
+      setAdminNotice(`Error: ${err.message}`);
+    } finally {
+      setAdminActionLoading(null);
     }
-  }, [activeTab, currentUser, isDemoMode]);
+  };
+
+  const handleAdminTriggerTick = async () => {
+    if (!isSuperuser) return;
+    setAdminActionLoading("trigger-tick");
+    setAdminTickResult(null);
+    try {
+      const res = await apiFetch("/api/v1/admin/trigger-tick", { method: "POST" });
+      const data = await res.json();
+      setAdminTickResult(data);
+      setAdminNotice("Watchdog batch evaluation executed successfully!");
+      loadAdminData();
+    } catch (err: any) {
+      setAdminNotice(`Watchdog error: ${err.message}`);
+    } finally {
+      setAdminActionLoading(null);
+    }
+  };
+
+  const handleAdminRunEgress = async () => {
+    if (!isSuperuser) return;
+    setAdminActionLoading("run-egress");
+    setAdminEgressResult(null);
+    try {
+      const res = await apiFetch("/api/v1/admin/egress-test", { method: "GET" });
+      const data = await res.json();
+      setAdminEgressResult(data);
+      setAdminNotice("Live network egress probe finished!");
+    } catch (err: any) {
+      setAdminNotice(`Egress probe error: ${err.message}`);
+    } finally {
+      setAdminActionLoading(null);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === "admin") {
+      if (!isSuperuser) {
+        setActiveTab("overview");
+      } else {
+        loadAdminData();
+      }
+    }
+  }, [activeTab, isSuperuser]);
 
   // Handle Authentication with Automated Exponential Backoff and Honest Error Messaging
   const handleAuth = async (e: React.FormEvent) => {
@@ -890,9 +954,9 @@ export default function MailOrbitDashboard() {
                   border: "1px solid #334155",
                 }}
               >
-                {currentUser?.is_superuser && <Crown size={14} color="#fbbf24" />}
+                {isSuperuser && <Crown size={14} color="#fbbf24" />}
                 <span style={{ color: "#e2e8f0" }}>{currentUser?.email || "User"}</span>
-                {currentUser?.is_superuser && (
+                {isSuperuser && (
                   <span style={{ fontSize: "0.68rem", background: "#f59e0b", color: "#000000", fontWeight: 700, padding: "1px 5px", borderRadius: "4px" }}>
                     SUPERUSER
                   </span>
@@ -1124,7 +1188,7 @@ export default function MailOrbitDashboard() {
                 About Vikas Dangi
               </button>
 
-              {(currentUser?.is_superuser || isDemoMode) && (
+              {isSuperuser && (
                 <button
                   onClick={() => setActiveTab("admin")}
                   style={{
@@ -2069,138 +2133,490 @@ export default function MailOrbitDashboard() {
                     </div>
                   </div>
 
+                  {/* Experience, Research & AI Projects Grid */}
+                  <h3 style={{ fontSize: "1.25rem", fontWeight: 700, margin: "0 0 16px" }}>Experience, Research & AI Projects</h3>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "16px", marginBottom: "32px" }}>
+                    <div style={{ background: "#111827", padding: "20px", borderRadius: "10px", border: "1px solid #1f2937" }}>
+                      <div style={{ fontSize: "0.78rem", color: "#38bdf8", fontWeight: 700, marginBottom: "4px" }}>AI R&D INTERN &bull; 2026</div>
+                      <div style={{ fontSize: "1rem", fontWeight: 700, color: "#ffffff", marginBottom: "6px" }}>IteraSim Technologies</div>
+                      <p style={{ color: "#94a3b8", fontSize: "0.84rem", lineHeight: "1.5", margin: 0 }}>
+                        Engineered domain-specific RAG pipelines using dense vector indexing (HNSW), Reciprocal Rank Fusion (RRF), and MMR re-ranking for engineering simulation documentation.
+                      </p>
+                    </div>
+
+                    <div style={{ background: "#111827", padding: "20px", borderRadius: "10px", border: "1px solid #1f2937" }}>
+                      <div style={{ fontSize: "0.78rem", color: "#c084fc", fontWeight: 700, marginBottom: "4px" }}>DATA SCIENCE INTERN &bull; 2024</div>
+                      <div style={{ fontSize: "1rem", fontWeight: 700, color: "#ffffff", marginBottom: "6px" }}>FITT &mdash; IIT Delhi</div>
+                      <p style={{ color: "#94a3b8", fontSize: "0.84rem", lineHeight: "1.5", margin: 0 }}>
+                        Collaborated with IIT research scholars on predictive machine learning models, feature engineering pipelines, and algorithmic performance evaluations.
+                      </p>
+                    </div>
+
+                    <div style={{ background: "#111827", padding: "20px", borderRadius: "10px", border: "1px solid #1f2937" }}>
+                      <div style={{ fontSize: "0.78rem", color: "#34d399", fontWeight: 700, marginBottom: "4px" }}>GENAI + XAI FACT-CHECKING</div>
+                      <div style={{ fontSize: "1rem", fontWeight: 700, color: "#ffffff", marginBottom: "6px" }}>Fake News Forensics Engine</div>
+                      <p style={{ color: "#94a3b8", fontSize: "0.84rem", lineHeight: "1.5", margin: "0 0 10px" }}>
+                        Dual-engine credibility system combining calibrated sublinear classifiers with Explainable AI token attribution (90% CV accuracy).
+                      </p>
+                      <a href="https://vikas003dangi.github.io/Fake-news-detection" target="_blank" rel="noreferrer" style={{ color: "#38bdf8", fontSize: "0.8rem", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                        Open Live Web App <ExternalLink size={11} />
+                      </a>
+                    </div>
+                  </div>
+
                   {/* Core Tech Stack Matrix */}
-                  <div style={{ background: "#111827", padding: "24px", borderRadius: "12px", border: "1px solid #1f2937" }}>
+                  <div style={{ background: "#111827", padding: "24px", borderRadius: "12px", border: "1px solid #1f2937", marginBottom: "32px" }}>
                     <h3 style={{ margin: "0 0 16px", fontSize: "1.1rem" }}>Technical Expertise</h3>
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px" }}>
                       <div>
                         <div style={{ fontSize: "0.82rem", fontWeight: 700, color: "#38bdf8", marginBottom: "6px" }}>LANGUAGES & RUNTIMES</div>
                         <div style={{ color: "#cbd5e1", fontSize: "0.85rem", lineHeight: "1.6" }}>
-                          Python (AsyncIO, FastAPI, Django), TypeScript, SQL (PostgreSQL), Bash
+                          Python (AsyncIO, FastAPI, Django 5.2), TypeScript, SQL (PostgreSQL), Next.js, Bash
                         </div>
                       </div>
                       <div>
                         <div style={{ fontSize: "0.82rem", fontWeight: 700, color: "#a855f7", marginBottom: "6px" }}>AI & LLM PIPELINES</div>
                         <div style={{ color: "#cbd5e1", fontSize: "0.85rem", lineHeight: "1.6" }}>
-                          Gemini API, RAG Architectures, LangChain, SentenceTransformers, Vector Search
+                          Gemini 2.5, RAG (RRF, MMR, HNSW), Multi-Agent Delegation, LangChain, Prompt Engineering
                         </div>
                       </div>
                       <div>
                         <div style={{ fontSize: "0.82rem", fontWeight: 700, color: "#34d399", marginBottom: "6px" }}>INFRASTRUCTURE & DB</div>
                         <div style={{ color: "#cbd5e1", fontSize: "0.85rem", lineHeight: "1.6" }}>
-                          PostgreSQL 16, Neon Serverless, Redis, Docker, Render Cloud, GitHub Actions
+                          PostgreSQL 16, Neon Serverless, Redis, Docker, Daphne ASGI, Render Cloud, GitHub Actions
                         </div>
                       </div>
+                    </div>
+                  </div>
+
+                  {/* Certifications & Honors */}
+                  <div style={{ background: "#111827", padding: "24px", borderRadius: "12px", border: "1px solid #1f2937" }}>
+                    <h3 style={{ margin: "0 0 14px", fontSize: "1.1rem" }}>Certifications & Honors</h3>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>
+                      <span style={{ background: "#1f2937", border: "1px solid #f59e0b", color: "#fbbf24", padding: "6px 12px", borderRadius: "6px", fontSize: "0.82rem", fontWeight: 600 }}>
+                        🏆 Oracle Certified GenAI Professional (2025)
+                      </span>
+                      <span style={{ background: "#1f2937", border: "1px solid #0284c7", color: "#38bdf8", padding: "6px 12px", borderRadius: "6px", fontSize: "0.82rem", fontWeight: 600 }}>
+                        ⚡ Oracle Certified AI Foundations Associate (2025)
+                      </span>
+                      <span style={{ background: "#1f2937", border: "1px solid #374151", color: "#e2e8f0", padding: "6px 12px", borderRadius: "6px", fontSize: "0.82rem", fontWeight: 500 }}>
+                        🎖️ 2nd Place: MSME DFO Indore Project Exhibition
+                      </span>
+                      <span style={{ background: "#1f2937", border: "1px solid #374151", color: "#e2e8f0", padding: "6px 12px", borderRadius: "6px", fontSize: "0.82rem", fontWeight: 500 }}>
+                        🥇 1st Place: State-Level Science Model Fair
+                      </span>
+                      <span style={{ background: "#1f2937", border: "1px solid #8b5cf6", color: "#c084fc", padding: "6px 12px", borderRadius: "6px", fontSize: "0.82rem", fontWeight: 500 }}>
+                        🏛️ Residential Fellowship: Advaita Youth Retreat (Tatvabodh)
+                      </span>
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* Admin Control Deck (Superuser & Demo Mode) */}
-              {activeTab === "admin" && (currentUser?.is_superuser || isDemoMode) && (
+              {/* Superuser Admin Control Deck (STRICTLY for vikassdangi@gmail.com and vd19055@gmail.com) */}
+              {activeTab === "admin" && isSuperuser && (
                 <div>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "24px", flexWrap: "wrap", gap: "16px" }}>
                     <div>
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                        <Crown size={22} color="#fbbf24" />
-                        <h1 style={{ fontSize: "1.85rem", fontWeight: 700, margin: 0 }}>Superuser Admin Control Deck</h1>
+                      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                        <Crown size={24} color="#fbbf24" style={{ filter: "drop-shadow(0 0 10px rgba(251, 191, 36, 0.5))" }} />
+                        <h1 style={{ fontSize: "1.95rem", fontWeight: 800, margin: 0, color: "#ffffff" }}>
+                          Master Superuser Control Deck
+                        </h1>
+                        <span style={{ fontSize: "0.72rem", background: "rgba(245, 158, 11, 0.2)", color: "#fbbf24", border: "1px solid #f59e0b", padding: "3px 9px", borderRadius: "20px", fontWeight: 700 }}>
+                          AUTHORIZED ADMIN
+                        </span>
                       </div>
-                      <p style={{ color: "#94a3b8", fontSize: "0.92rem", margin: "4px 0 0" }}>
-                        Master telemetry, database pool monitor, and queue dispatcher for authorized administrators.
+                      <p style={{ color: "#94a3b8", fontSize: "0.92rem", margin: "6px 0 0" }}>
+                        Live platform telemetry, database connection management, user accounts, and direct dispatch operations.
                       </p>
                     </div>
-                    <button
-                      onClick={loadAdminData}
-                      disabled={loadingAdmin}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "6px",
-                        background: "#1f2937",
-                        color: "#38bdf8",
-                        border: "1px solid #0284c7",
-                        padding: "8px 14px",
-                        borderRadius: "6px",
-                        fontSize: "0.82rem",
-                        fontWeight: 600,
-                        cursor: "pointer",
-                      }}
-                    >
-                      <RefreshCw size={14} className={loadingAdmin ? "animate-spin" : ""} />
-                      Refresh Telemetry
-                    </button>
+
+                    <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                      <button
+                        onClick={handleAdminTriggerTick}
+                        disabled={adminActionLoading === "trigger-tick"}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          background: "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)",
+                          color: "#000000",
+                          border: "none",
+                          padding: "8px 14px",
+                          borderRadius: "6px",
+                          fontSize: "0.82rem",
+                          fontWeight: 700,
+                          cursor: "pointer",
+                          boxShadow: "0 2px 8px rgba(245, 158, 11, 0.3)",
+                        }}
+                      >
+                        <Zap size={14} className={adminActionLoading === "trigger-tick" ? "animate-spin" : ""} />
+                        Trigger Watchdog /tick
+                      </button>
+
+                      <button
+                        onClick={handleAdminRunEgress}
+                        disabled={adminActionLoading === "run-egress"}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          background: "#1e293b",
+                          color: "#38bdf8",
+                          border: "1px solid #0284c7",
+                          padding: "8px 14px",
+                          borderRadius: "6px",
+                          fontSize: "0.82rem",
+                          fontWeight: 600,
+                          cursor: "pointer",
+                        }}
+                      >
+                        <Globe size={14} className={adminActionLoading === "run-egress" ? "animate-spin" : ""} />
+                        Run Egress Probe
+                      </button>
+
+                      <button
+                        onClick={loadAdminData}
+                        disabled={loadingAdmin}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          background: "#1f2937",
+                          color: "#e2e8f0",
+                          border: "1px solid #374151",
+                          padding: "8px 14px",
+                          borderRadius: "6px",
+                          fontSize: "0.82rem",
+                          fontWeight: 600,
+                          cursor: "pointer",
+                        }}
+                      >
+                        <RefreshCw size={14} className={loadingAdmin ? "animate-spin" : ""} />
+                        Refresh
+                      </button>
+                    </div>
                   </div>
 
+                  {/* Admin Notice Banner */}
+                  {adminNotice && (
+                    <div
+                      style={{
+                        padding: "12px 18px",
+                        borderRadius: "8px",
+                        background: "rgba(56, 189, 248, 0.12)",
+                        border: "1px solid #0284c7",
+                        color: "#38bdf8",
+                        fontSize: "0.88rem",
+                        marginBottom: "20px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "10px",
+                      }}
+                    >
+                      <Info size={16} />
+                      <span>{adminNotice}</span>
+                    </div>
+                  )}
+
                   {/* System Telemetry Row */}
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "16px", marginBottom: "28px" }}>
-                    <div style={{ background: "#111827", padding: "20px", borderRadius: "10px", border: "1px solid #1f2937" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "16px", marginBottom: "24px" }}>
+                    <div style={{ background: "#111827", padding: "18px", borderRadius: "10px", border: "1px solid #1f2937" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
                         <Database size={18} color="#38bdf8" />
-                        <span style={{ fontWeight: 600, fontSize: "0.95rem" }}>Neon Serverless PostgreSQL</span>
+                        <span style={{ fontWeight: 600, fontSize: "0.92rem", color: "#f8fafc" }}>Neon PostgreSQL 16</span>
                       </div>
-                      <div style={{ fontSize: "0.84rem", color: "#9ca3af", marginBottom: "6px" }}>
+                      <div style={{ fontSize: "0.82rem", color: "#9ca3af", marginBottom: "4px" }}>
                         Provider: {adminSystem?.database?.provider || "Neon Serverless (Ohio)"}
                       </div>
-                      <div style={{ fontSize: "0.84rem", color: "#4ade80", fontWeight: 600 }}>
-                        Status: Connected (SSL Mode Active)
+                      <div style={{ fontSize: "0.82rem", color: "#4ade80", fontWeight: 600, display: "flex", alignItems: "center", gap: "6px" }}>
+                        <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#4ade80" }} />
+                        Connected & SSL Enforced
                       </div>
                     </div>
 
-                    <div style={{ background: "#111827", padding: "20px", borderRadius: "10px", border: "1px solid #1f2937" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}>
+                    <div style={{ background: "#111827", padding: "18px", borderRadius: "10px", border: "1px solid #1f2937" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
                         <Server size={18} color="#c084fc" />
-                        <span style={{ fontWeight: 600, fontSize: "0.95rem" }}>Render Container Cluster</span>
+                        <span style={{ fontWeight: 600, fontSize: "0.92rem", color: "#f8fafc" }}>Unified Render Runtime</span>
                       </div>
-                      <div style={{ fontSize: "0.84rem", color: "#9ca3af", marginBottom: "6px" }}>
+                      <div style={{ fontSize: "0.82rem", color: "#9ca3af", marginBottom: "4px" }}>
                         Region: {adminSystem?.host?.region || "Oregon / US-West"}
                       </div>
-                      <div style={{ fontSize: "0.84rem", color: "#c084fc", fontWeight: 600 }}>
-                        Container: Python 3.12 FastAPI + Uvicorn
+                      <div style={{ fontSize: "0.82rem", color: "#c084fc", fontWeight: 600 }}>
+                        Single-Origin: Next.js Root + FastAPI
                       </div>
                     </div>
 
-                    <div style={{ background: "#111827", padding: "20px", borderRadius: "10px", border: "1px solid #1f2937" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}>
+                    <div style={{ background: "#111827", padding: "18px", borderRadius: "10px", border: "1px solid #1f2937" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
                         <Clock size={18} color="#f59e0b" />
-                        <span style={{ fontWeight: 600, fontSize: "0.95rem" }}>Watchdog Scheduler (/tick)</span>
+                        <span style={{ fontWeight: 600, fontSize: "0.92rem", color: "#f8fafc" }}>Watchdog Scheduler</span>
                       </div>
-                      <div style={{ fontSize: "0.84rem", color: "#9ca3af", marginBottom: "6px" }}>
-                        Security: Header-Only X-Tick-Secret
+                      <div style={{ fontSize: "0.82rem", color: "#9ca3af", marginBottom: "4px" }}>
+                        Target: /api/v1/tick (Header Auth)
                       </div>
-                      <div style={{ fontSize: "0.84rem", color: "#fbbf24", fontWeight: 600 }}>
-                        Standby Mode: Zero queries when idle
+                      <div style={{ fontSize: "0.82rem", color: "#fbbf24", fontWeight: 600 }}>
+                        Quiet-Hours Active: 0 DB queries on idle
+                      </div>
+                    </div>
+
+                    <div style={{ background: "#111827", padding: "18px", borderRadius: "10px", border: "1px solid #1f2937" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                        <ShieldCheck size={18} color="#34d399" />
+                        <span style={{ fontWeight: 600, fontSize: "0.92rem", color: "#f8fafc" }}>Egress Relay & Safety</span>
+                      </div>
+                      <div style={{ fontSize: "0.82rem", color: "#9ca3af", marginBottom: "4px" }}>
+                        Google Apps Script over HTTPS:443
+                      </div>
+                      <div style={{ fontSize: "0.82rem", color: "#34d399", fontWeight: 600 }}>
+                        Circuit Breaker: 10% Auto-Pause
                       </div>
                     </div>
                   </div>
 
                   {/* Platform Totals Grid */}
-                  <div style={{ background: "#111827", padding: "24px", borderRadius: "12px", border: "1px solid #1f2937", marginBottom: "28px" }}>
-                    <h3 style={{ margin: "0 0 16px", fontSize: "1.1rem" }}>Platform-Wide Totals</h3>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "16px" }}>
-                      <div style={{ background: "#1f2937", padding: "16px", borderRadius: "8px" }}>
-                        <div style={{ fontSize: "0.78rem", color: "#94a3b8" }}>TOTAL WORKSPACES</div>
-                        <div style={{ fontSize: "1.6rem", fontWeight: 700, marginTop: "4px" }}>
-                          {adminStats?.totals?.users ?? 1}
+                  <div style={{ background: "#111827", padding: "20px", borderRadius: "12px", border: "1px solid #1f2937", marginBottom: "24px" }}>
+                    <h3 style={{ margin: "0 0 14px", fontSize: "1.05rem", color: "#f8fafc" }}>Platform Totals (Live Neon DB)</h3>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: "14px" }}>
+                      <div style={{ background: "#1f2937", padding: "14px", borderRadius: "8px" }}>
+                        <div style={{ fontSize: "0.75rem", color: "#94a3b8" }}>REGISTERED USERS</div>
+                        <div style={{ fontSize: "1.55rem", fontWeight: 800, marginTop: "4px", color: "#ffffff" }}>
+                          {adminStats?.totals?.users ?? adminUsers.length}
                         </div>
                       </div>
-                      <div style={{ background: "#1f2937", padding: "16px", borderRadius: "8px" }}>
-                        <div style={{ fontSize: "0.78rem", color: "#94a3b8" }}>TOTAL CAMPAIGN BATCHES</div>
-                        <div style={{ fontSize: "1.6rem", fontWeight: 700, marginTop: "4px", color: "#38bdf8" }}>
-                          {adminStats?.totals?.batches ?? batches.length}
+                      <div style={{ background: "#1f2937", padding: "14px", borderRadius: "8px" }}>
+                        <div style={{ fontSize: "0.75rem", color: "#94a3b8" }}>TOTAL CAMPAIGN BATCHES</div>
+                        <div style={{ fontSize: "1.55rem", fontWeight: 800, marginTop: "4px", color: "#38bdf8" }}>
+                          {adminStats?.totals?.batches ?? adminBatches.length}
                         </div>
                       </div>
-                      <div style={{ background: "#1f2937", padding: "16px", borderRadius: "8px" }}>
-                        <div style={{ fontSize: "0.78rem", color: "#94a3b8" }}>TOTAL LEADS MANAGED</div>
-                        <div style={{ fontSize: "1.6rem", fontWeight: 700, marginTop: "4px", color: "#22c55e" }}>
-                          {adminStats?.totals?.contacts ?? contacts.length}
+                      <div style={{ background: "#1f2937", padding: "14px", borderRadius: "8px" }}>
+                        <div style={{ fontSize: "0.75rem", color: "#94a3b8" }}>TOTAL LEADS INGESTED</div>
+                        <div style={{ fontSize: "1.55rem", fontWeight: 800, marginTop: "4px", color: "#22c55e" }}>
+                          {adminStats?.totals?.contacts ?? 0}
                         </div>
                       </div>
-                      <div style={{ background: "#1f2937", padding: "16px", borderRadius: "8px" }}>
-                        <div style={{ fontSize: "0.78rem", color: "#94a3b8" }}>ACTIVE SENDER RELAYS</div>
-                        <div style={{ fontSize: "1.6rem", fontWeight: 700, marginTop: "4px", color: "#c084fc" }}>
-                          {adminStats?.totals?.sender_relays ?? relays.length}
+                      <div style={{ background: "#1f2937", padding: "14px", borderRadius: "8px" }}>
+                        <div style={{ fontSize: "0.75rem", color: "#94a3b8" }}>SENDER RELAYS</div>
+                        <div style={{ fontSize: "1.55rem", fontWeight: 800, marginTop: "4px", color: "#c084fc" }}>
+                          {adminStats?.totals?.sender_relays ?? 0}
                         </div>
                       </div>
+                      <div style={{ background: "#1f2937", padding: "14px", borderRadius: "8px" }}>
+                        <div style={{ fontSize: "0.75rem", color: "#94a3b8" }}>ENCRYPTED AI KEYS</div>
+                        <div style={{ fontSize: "1.55rem", fontWeight: 800, marginTop: "4px", color: "#fbbf24" }}>
+                          {adminStats?.totals?.ai_keys ?? 0}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Real-time Operation Results (Terminal Displays) */}
+                  {adminTickResult && (
+                    <div style={{ background: "#0b101d", border: "1px solid #1e293b", borderRadius: "10px", padding: "16px", marginBottom: "24px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#fbbf24", fontWeight: 700, fontSize: "0.85rem" }}>
+                          <Zap size={14} />
+                          Watchdog Evaluation Terminal Output
+                        </div>
+                        <span style={{ fontSize: "0.72rem", color: "#64748b" }}>{adminTickResult.timestamp}</span>
+                      </div>
+                      <pre style={{ margin: 0, fontSize: "0.8rem", color: "#e2e8f0", background: "#060913", padding: "12px", borderRadius: "6px", overflowX: "auto" }}>
+                        {JSON.stringify(adminTickResult, null, 2)}
+                      </pre>
+                    </div>
+                  )}
+
+                  {adminEgressResult && (
+                    <div style={{ background: "#0b101d", border: "1px solid #1e293b", borderRadius: "10px", padding: "16px", marginBottom: "24px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#38bdf8", fontWeight: 700, fontSize: "0.85rem" }}>
+                          <Globe size={14} />
+                          Live Render Outbound Network Probe Results
+                        </div>
+                        <span style={{ fontSize: "0.72rem", color: "#64748b" }}>{adminEgressResult.server_time}</span>
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "12px", marginBottom: "12px" }}>
+                        <div style={{ background: "#111827", padding: "12px", borderRadius: "6px", border: "1px solid #1f2937" }}>
+                          <div style={{ fontSize: "0.72rem", color: "#94a3b8" }}>SMTP TCP:587</div>
+                          <div style={{ fontSize: "0.85rem", fontWeight: 700, color: adminEgressResult.smtp_587?.status === "PASS" ? "#4ade80" : "#f87171" }}>
+                            [{adminEgressResult.smtp_587?.status}] {adminEgressResult.smtp_587?.detail}
+                          </div>
+                        </div>
+                        <div style={{ background: "#111827", padding: "12px", borderRadius: "6px", border: "1px solid #1f2937" }}>
+                          <div style={{ fontSize: "0.72rem", color: "#94a3b8" }}>SCRIPT TCP:443</div>
+                          <div style={{ fontSize: "0.85rem", fontWeight: 700, color: adminEgressResult.script_tcp_443?.status === "PASS" ? "#4ade80" : "#f87171" }}>
+                            [{adminEgressResult.script_tcp_443?.status}] {adminEgressResult.script_tcp_443?.detail}
+                          </div>
+                        </div>
+                        <div style={{ background: "#111827", padding: "12px", borderRadius: "6px", border: "1px solid #1f2937" }}>
+                          <div style={{ fontSize: "0.72rem", color: "#94a3b8" }}>HTTPS GET SCRIPT.GOOGLE</div>
+                          <div style={{ fontSize: "0.85rem", fontWeight: 700, color: adminEgressResult.script_https_get?.status === "PASS" ? "#4ade80" : "#f87171" }}>
+                            [{adminEgressResult.script_https_get?.status}] {adminEgressResult.script_https_get?.detail}
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ fontSize: "0.78rem", color: "#94a3b8" }}>{adminEgressResult.note}</div>
+                    </div>
+                  )}
+
+                  {/* Registered Users Station */}
+                  <div style={{ background: "#111827", padding: "20px", borderRadius: "12px", border: "1px solid #1f2937", marginBottom: "24px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
+                      <h3 style={{ margin: 0, fontSize: "1.05rem", color: "#f8fafc" }}>
+                        Registered User Accounts ({adminUsers.length})
+                      </h3>
+                      <span style={{ fontSize: "0.75rem", color: "#94a3b8" }}>Manage account permissions and active status</span>
+                    </div>
+
+                    <div style={{ overflowX: "auto" }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem", textAlign: "left" }}>
+                        <thead>
+                          <tr style={{ borderBottom: "1px solid #1f2937", color: "#94a3b8" }}>
+                            <th style={{ padding: "10px 8px" }}>User Email</th>
+                            <th style={{ padding: "10px 8px" }}>Status</th>
+                            <th style={{ padding: "10px 8px" }}>Leads</th>
+                            <th style={{ padding: "10px 8px" }}>Batches</th>
+                            <th style={{ padding: "10px 8px" }}>Relays</th>
+                            <th style={{ padding: "10px 8px" }}>Registered At</th>
+                            <th style={{ padding: "10px 8px", textAlign: "right" }}>Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {adminUsers.map((u) => {
+                            const isSelf = u.email.toLowerCase() === currentUser?.email?.toLowerCase();
+                            return (
+                              <tr key={u.id} style={{ borderBottom: "1px solid #1f2937" }}>
+                                <td style={{ padding: "10px 8px", fontWeight: 600, color: "#ffffff" }}>
+                                  {u.email}
+                                  {SUPERUSER_EMAILS.includes(u.email.toLowerCase()) && (
+                                    <span style={{ marginLeft: "8px", fontSize: "0.65rem", background: "#f59e0b", color: "#000000", fontWeight: 800, padding: "1px 5px", borderRadius: "4px" }}>
+                                      ADMIN
+                                    </span>
+                                  )}
+                                </td>
+                                <td style={{ padding: "10px 8px" }}>
+                                  <span
+                                    style={{
+                                      display: "inline-block",
+                                      padding: "2px 8px",
+                                      borderRadius: "12px",
+                                      fontSize: "0.72rem",
+                                      fontWeight: 600,
+                                      background: u.is_active ? "rgba(34, 197, 94, 0.15)" : "rgba(239, 68, 68, 0.15)",
+                                      color: u.is_active ? "#4ade80" : "#f87171",
+                                      border: `1px solid ${u.is_active ? "#22c55e" : "#ef4444"}`,
+                                    }}
+                                  >
+                                    {u.is_active ? "Active" : "Suspended"}
+                                  </span>
+                                </td>
+                                <td style={{ padding: "10px 8px", color: "#e2e8f0" }}>{u.total_contacts}</td>
+                                <td style={{ padding: "10px 8px", color: "#e2e8f0" }}>{u.total_batches}</td>
+                                <td style={{ padding: "10px 8px", color: "#e2e8f0" }}>{u.total_relays}</td>
+                                <td style={{ padding: "10px 8px", color: "#94a3b8" }}>
+                                  {u.created_at ? new Date(u.created_at).toLocaleDateString() : "—"}
+                                </td>
+                                <td style={{ padding: "10px 8px", textAlign: "right" }}>
+                                  {!isSelf && (
+                                    <button
+                                      onClick={() => handleToggleUserStatus(u.id)}
+                                      disabled={adminActionLoading === `toggle-${u.id}`}
+                                      style={{
+                                        background: u.is_active ? "#7f1d1d" : "#065f46",
+                                        color: "#ffffff",
+                                        border: "none",
+                                        padding: "4px 10px",
+                                        borderRadius: "4px",
+                                        fontSize: "0.75rem",
+                                        fontWeight: 600,
+                                        cursor: "pointer",
+                                      }}
+                                    >
+                                      {u.is_active ? "Suspend" : "Activate"}
+                                    </button>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* All Platform Batches */}
+                  <div style={{ background: "#111827", padding: "20px", borderRadius: "12px", border: "1px solid #1f2937" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
+                      <h3 style={{ margin: 0, fontSize: "1.05rem", color: "#f8fafc" }}>
+                        Active & Recent Outreach Batches ({adminBatches.length})
+                      </h3>
+                      <span style={{ fontSize: "0.75rem", color: "#94a3b8" }}>Global dispatch monitor across all workspaces</span>
+                    </div>
+
+                    <div style={{ overflowX: "auto" }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem", textAlign: "left" }}>
+                        <thead>
+                          <tr style={{ borderBottom: "1px solid #1f2937", color: "#94a3b8" }}>
+                            <th style={{ padding: "10px 8px" }}>Owner</th>
+                            <th style={{ padding: "10px 8px" }}>Batch #</th>
+                            <th style={{ padding: "10px 8px" }}>Scheduled Time</th>
+                            <th style={{ padding: "10px 8px" }}>Status</th>
+                            <th style={{ padding: "10px 8px" }}>Sent / Replaced / Bounced</th>
+                            <th style={{ padding: "10px 8px" }}>Total Contacts</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {adminBatches.length === 0 ? (
+                            <tr>
+                              <td colSpan={6} style={{ padding: "16px", textAlign: "center", color: "#64748b" }}>
+                                No batches generated across platform yet.
+                              </td>
+                            </tr>
+                          ) : (
+                            adminBatches.map((b) => (
+                              <tr key={b.id} style={{ borderBottom: "1px solid #1f2937" }}>
+                                <td style={{ padding: "10px 8px", color: "#ffffff", fontWeight: 500 }}>{b.owner_email}</td>
+                                <td style={{ padding: "10px 8px", color: "#38bdf8" }}>#{b.position}</td>
+                                <td style={{ padding: "10px 8px", color: "#94a3b8" }}>
+                                  {b.scheduled_date || "Anyday"} @ {b.scheduled_time || "09:00"}
+                                </td>
+                                <td style={{ padding: "10px 8px" }}>
+                                  <span
+                                    style={{
+                                      display: "inline-block",
+                                      padding: "2px 8px",
+                                      borderRadius: "12px",
+                                      fontSize: "0.72rem",
+                                      fontWeight: 600,
+                                      background:
+                                        b.status === "COMPLETED"
+                                          ? "rgba(34, 197, 94, 0.15)"
+                                          : b.status === "ACTIVE"
+                                          ? "rgba(56, 189, 248, 0.15)"
+                                          : "rgba(245, 158, 11, 0.15)",
+                                      color:
+                                        b.status === "COMPLETED"
+                                          ? "#4ade80"
+                                          : b.status === "ACTIVE"
+                                          ? "#38bdf8"
+                                          : "#fbbf24",
+                                    }}
+                                  >
+                                    {b.status}
+                                  </span>
+                                </td>
+                                <td style={{ padding: "10px 8px", color: "#cbd5e1" }}>
+                                  {b.sent_count} sent &bull; {b.replaced_count} replaced &bull; {b.bounced_count} bounced
+                                </td>
+                                <td style={{ padding: "10px 8px", color: "#e2e8f0" }}>{b.contact_count}</td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
                     </div>
                   </div>
                 </div>
