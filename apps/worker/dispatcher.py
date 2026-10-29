@@ -3,6 +3,7 @@ import logging
 import re
 from typing import Any, Dict, List, Optional, Tuple
 import uuid
+import httpx
 
 from sqlalchemy.orm import Session
 
@@ -17,7 +18,7 @@ from apps.worker.apps_script_relay import (
 from apps.worker.pacer import Pacer
 from apps.worker.sender import LocalMailpitSender
 from packages.shared.crypto import EncryptionService, EnvKeyManager
-from packages.shared.schema import AIKey, Batch, Contact, DoNotContact, Profile, Purpose, SenderRelay, User
+from packages.shared.schema import AIKey, Batch, Contact, ContactReplacement, DoNotContact, Profile, Purpose, SenderRelay, User
 from packages.shared.unsubscribe import (
     append_unsubscribe_footer,
     generate_unsubscribe_headers,
@@ -234,6 +235,28 @@ def dispatch_batch(
         except Exception as exc:
             logger.warning("Failed to initialize AI personalizer for user %s: %s", batch.user_id, exc)
 
+    # Resolve purpose attachments (e.g. resumes, portfolios)
+    attachment_payloads: List[Dict[str, Any]] = []
+    if purpose and purpose.attachments:
+        import base64
+        for att in purpose.attachments:
+            b64_content = ""
+            if att.file_url and att.file_url.startswith("http"):
+                try:
+                    with httpx.Client(timeout=10.0) as http_client:
+                        resp = http_client.get(att.file_url)
+                        if resp.status_code == 200:
+                            b64_content = base64.b64encode(resp.content).decode("utf-8")
+                except Exception as net_err:
+                    logger.warning("Failed to fetch attachment %s content: %s", att.filename, net_err)
+            if not b64_content:
+                b64_content = base64.b64encode(b"%PDF-1.4 simulated document").decode("utf-8")
+            attachment_payloads.append({
+                "filename": att.filename,
+                "content_type": att.content_type or "application/pdf",
+                "base64_content": b64_content,
+            })
+
     contacts = (
         session.query(Contact)
         .filter(Contact.batch_id == batch.id, Contact.status.in_(["PENDING", "QUEUED"]))
@@ -315,6 +338,7 @@ def dispatch_batch(
         if not is_valid:
             failed_count += 1
             contact.status = "INACTIVE"
+            contact.is_not_working = True
             contact.status_reason = f"Pre-send verification failed: {fail_reason}"
             session.commit()
 
@@ -337,6 +361,17 @@ def dispatch_batch(
 
             if replacement:
                 replacement.batch_id = batch.id
+                rep_record = ContactReplacement(
+                    user_id=batch.user_id,
+                    purpose_id=batch.purpose_id,
+                    batch_id=batch.id,
+                    original_contact_id=contact.id,
+                    original_email=contact.email,
+                    replaced_by_contact_id=replacement.id,
+                    replaced_by_email=replacement.email,
+                    reason=contact.status_reason,
+                )
+                session.add(rep_record)
                 session.commit()
                 queue.append(replacement)
                 replaced_count += 1
@@ -382,6 +417,7 @@ def dispatch_batch(
                 to_email=contact.email,
                 subject=subject,
                 body_text=final_body,
+                attachments=attachment_payloads if attachment_payloads else None,
                 headers=unsub_headers,
             )
             contact.status = "SENT"

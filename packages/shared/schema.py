@@ -86,6 +86,7 @@ class User(Base):
     verification_sent_at = Column(DateTime(timezone=True), nullable=True)
     reset_token_hash = Column(String(255), nullable=True)
     reset_token_expires_at = Column(DateTime(timezone=True), nullable=True)
+    sender_name = Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
 
@@ -97,6 +98,7 @@ class User(Base):
     contacts = relationship("Contact", back_populates="user", cascade="all, delete-orphan")
     attachments = relationship("Attachment", back_populates="user", cascade="all, delete-orphan")
     do_not_contact_records = relationship("DoNotContact", back_populates="user", cascade="all, delete-orphan")
+    replacements = relationship("ContactReplacement", back_populates="user", cascade="all, delete-orphan")
 
 
 class Profile(Base):
@@ -165,6 +167,12 @@ class Purpose(Base):
     description = Column(Text, nullable=True)
     default_subject_template = Column(String(255), nullable=True)
     default_body_template = Column(Text, nullable=True)
+    daily_limit = Column(Integer, default=30, nullable=False)
+    start_date = Column(Date, nullable=True)
+    stop_date = Column(Date, nullable=True)
+    skip_dates = Column(JSONB, default=list, nullable=False)
+    is_repeating = Column(Boolean, default=False, nullable=False)
+    cooldown_days = Column(Integer, default=7, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
@@ -249,6 +257,8 @@ class Contact(Base):
     custom_pitch = Column(JSONB, default=dict, nullable=False)
     status = Column(String(50), default="PENDING", nullable=False)  # PENDING, QUEUED, SENT, BOUNCED, INVALID_DOMAIN, INACTIVE, UNSUBSCRIBED
     status_reason = Column(Text, nullable=True)
+    is_not_working = Column(Boolean, default=False, nullable=False, index=True)
+    sequence_position = Column(Integer, default=0, nullable=False)
     sent_at = Column(DateTime(timezone=True), nullable=True)
     error = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
@@ -311,4 +321,25 @@ class BootstrapRecord(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     consumed_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
     ip_address = Column(String(45), nullable=True)
+
+
+class ContactReplacement(Base):
+    """
+    Audit log of automatically or manually quarantined dead/bounced leads
+    and the replacement lead pulled in to fulfill the daily batch quota.
+    """
+    __tablename__ = "contact_replacements"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    purpose_id = Column(UUID(as_uuid=True), ForeignKey("purposes.id", ondelete="SET NULL"), nullable=True, index=True)
+    batch_id = Column(UUID(as_uuid=True), ForeignKey("batches.id", ondelete="SET NULL"), nullable=True, index=True)
+    original_contact_id = Column(UUID(as_uuid=True), ForeignKey("contacts.id", ondelete="SET NULL"), nullable=True)
+    original_email = Column(String(255), nullable=False)
+    replaced_by_contact_id = Column(UUID(as_uuid=True), ForeignKey("contacts.id", ondelete="SET NULL"), nullable=True)
+    replaced_by_email = Column(String(255), nullable=False)
+    reason = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+    user = relationship("User", back_populates="replacements")
 

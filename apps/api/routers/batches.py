@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session
 from apps.api.dependencies import get_current_user, get_db
 from apps.api.services.batch_generator import auto_generate_batches
 from apps.api.services.schedule_cache import schedule_cache
-from packages.shared.schema import Batch, Contact, User
+from apps.worker.water_filler import SubBatchLike, water_fill_fair_share
+from packages.shared.schema import Batch, Contact, SenderRelay, User
 
 router = APIRouter(prefix="/api/v1/batches", tags=["Batches & Scheduling"])
 
@@ -46,6 +47,17 @@ class AutoGenerateResponse(BaseModel):
     created_batches_count: int
     contacts_assigned_count: int
     batches: List[BatchOut]
+
+
+class MoveContactsRequest(BaseModel):
+    contact_ids: List[uuid.UUID]
+
+
+class AutoBalanceResponse(BaseModel):
+    daily_budget: int
+    allocations: Dict[str, int]
+    total_pending: int
+    estimated_days: int
 
 
 @router.get("", response_model=List[BatchOut])
@@ -182,4 +194,88 @@ def dispatch_single_batch(
     result = dispatch_batch(session=db, batch_id=batch.id)
     schedule_cache.refresh_from_db(db)
     return result
+
+
+@router.post("/{batch_id}/move-contacts")
+def move_contacts_to_batch(
+    batch_id: uuid.UUID,
+    payload: MoveContactsRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Moves specified contacts into destination batch.
+    Enforces user tenant isolation.
+    """
+    batch = db.query(Batch).filter(
+        Batch.id == batch_id,
+        Batch.user_id == current_user.id,
+    ).first()
+    if not batch:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Destination batch not found")
+
+    updated_count = (
+        db.query(Contact)
+        .filter(
+            Contact.user_id == current_user.id,
+            Contact.id.in_(payload.contact_ids),
+        )
+        .update({"batch_id": batch.id}, synchronize_session=False)
+    )
+    db.commit()
+    schedule_cache.refresh_from_db(db)
+    return {
+        "status": "success",
+        "batch_id": str(batch.id),
+        "batch_name": batch.name,
+        "moved_count": updated_count,
+    }
+
+
+@router.post("/auto-balance", response_model=AutoBalanceResponse)
+def auto_balance_batches(
+    daily_budget: Optional[int] = Query(None, ge=1, le=100),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Recalculates target daily allocations across all active/pending batches for this user
+    using the water-filling fair-share balancing algorithm.
+    """
+    relay = db.query(SenderRelay).filter(
+        SenderRelay.user_id == current_user.id,
+        SenderRelay.status == "ACTIVE",
+    ).first()
+
+    budget = daily_budget or (relay.daily_cap if relay else 30)
+
+    batches = (
+        db.query(Batch)
+        .filter(Batch.user_id == current_user.id, Batch.status.in_(["PENDING", "ACTIVE"]))
+        .all()
+    )
+
+    sub_batches = []
+    total_pending = 0
+    for b in batches:
+        pending_cnt = (
+            db.query(Contact)
+            .filter(Contact.batch_id == b.id, Contact.status.in_(["PENDING", "QUEUED"]))
+            .count()
+        )
+        total_pending += pending_cnt
+        sub_batches.append(SubBatchLike(id=str(b.id), pending_count=pending_cnt))
+
+    allocations = water_fill_fair_share(sub_batches, daily_budget=budget)
+    str_allocations = {str(k): v for k, v in allocations.items()}
+
+    total_daily_flow = sum(allocations.values())
+    est_days = (total_pending + total_daily_flow - 1) // total_daily_flow if total_daily_flow > 0 else 0
+
+    return AutoBalanceResponse(
+        daily_budget=budget,
+        allocations=str_allocations,
+        total_pending=total_pending,
+        estimated_days=est_days,
+    )
 

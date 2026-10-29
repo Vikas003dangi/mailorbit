@@ -68,6 +68,59 @@ def parse_csv_content(content: str) -> List[Dict[str, Any]]:
     return [row for row in reader if any(row.values())]
 
 
+def parse_paste_text(raw_text: str) -> List[Dict[str, Any]]:
+    """
+    Parses unstructured text pasted by the user containing emails separated by
+    commas, semicolons, or newlines.
+    Supports formats like:
+      - 'user@example.com'
+      - 'John Doe <john@example.com>'
+      - 'Alice Smith: alice@example.com'
+    """
+    if not raw_text or not raw_text.strip():
+        return []
+
+    # Match email and optional surrounding name
+    # e.g. "John Doe" <john@example.com> or john@example.com
+    entries = re.split(r"[,\n;\r]+", raw_text)
+    rows: List[Dict[str, Any]] = []
+
+    name_email_pattern = re.compile(r"^(?:[\"']?([^<:\"]+?)[\"']?\s*[<:])?\s*([a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)>?$")
+
+    for entry in entries:
+        token = entry.strip()
+        if not token:
+            continue
+
+        match = name_email_pattern.match(token)
+        if match:
+            raw_name, raw_email = match.groups()
+            name = raw_name.strip() if raw_name else None
+            # If name is same as email, leave name None
+            if name and "@" in name:
+                name = None
+            rows.append({
+                "email": raw_email.strip(),
+                "name": name,
+                "company": None,
+                "role": None,
+            })
+        else:
+            # Fallback regex search for any email inside the token
+            search_match = re.search(r"([a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)", token)
+            if search_match:
+                found_email = search_match.group(1)
+                before = token[:search_match.start()].strip(" <\":'-")
+                rows.append({
+                    "email": found_email,
+                    "name": before if before else None,
+                    "company": None,
+                    "role": None,
+                })
+
+    return rows
+
+
 def process_contact_import(
     db: Session,
     user_id: uuid.UUID,

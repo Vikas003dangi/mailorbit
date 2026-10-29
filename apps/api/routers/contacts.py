@@ -10,11 +10,12 @@ from apps.api.services.batch_generator import auto_generate_batches
 from apps.api.services.contact_importer import (
     ImportResult,
     parse_csv_content,
+    parse_paste_text,
     process_contact_import,
 )
 from apps.api.services.rate_limiter import rate_limiter
 from apps.api.services.schedule_cache import schedule_cache
-from packages.shared.schema import Contact, User
+from packages.shared.schema import Contact, ContactReplacement, User
 
 router = APIRouter(prefix="/api/v1/contacts", tags=["Contacts & Leads"])
 
@@ -34,6 +35,26 @@ class BatchImportRequest(BaseModel):
     batch_size: int = 30
     daily_send_time: str = "10:00"
     active_days: List[str] = ["mon", "tue", "wed", "thu", "fri"]
+
+
+class PasteImportRequest(BaseModel):
+    raw_text: str
+    purpose_id: Optional[uuid.UUID] = None
+    auto_batch: bool = True
+    batch_size: int = 30
+    daily_send_time: str = "10:00"
+    active_days: List[str] = ["mon", "tue", "wed", "thu", "fri"]
+
+
+class ReplacementOut(BaseModel):
+    id: uuid.UUID
+    original_contact_id: Optional[uuid.UUID] = None
+    original_email: str
+    replaced_by_contact_id: Optional[uuid.UUID] = None
+    replaced_by_email: str
+    reason: str
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ContactOut(BaseModel):
@@ -110,6 +131,54 @@ def import_contacts_json(
     )
 
 
+@router.post("/paste", response_model=ImportResponse, status_code=status.HTTP_201_CREATED)
+def import_contacts_paste(
+    payload: PasteImportRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Imports contacts directly from pasted text (comma, semicolon, or newline separated).
+    Performs email normalization, deduplication, and optional auto-batching.
+    """
+    raw_rows = parse_paste_text(payload.raw_text)
+    if not raw_rows:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No valid email addresses found in pasted text",
+        )
+
+    summary, imported_contacts = process_contact_import(
+        db=db,
+        user_id=current_user.id,
+        raw_rows=raw_rows,
+        purpose_id=payload.purpose_id,
+    )
+
+    created_batches_count = 0
+    assigned_count = 0
+    if payload.auto_batch and imported_contacts:
+        imported_ids = [c.id for c in imported_contacts]
+        batches, assigned = auto_generate_batches(
+            db=db,
+            user_id=current_user.id,
+            purpose_id=payload.purpose_id,
+            batch_size=payload.batch_size,
+            daily_send_time=payload.daily_send_time,
+            active_days=payload.active_days,
+            contact_ids=imported_ids,
+        )
+        created_batches_count = len(batches)
+        assigned_count = assigned
+        schedule_cache.refresh_from_db(db)
+
+    return ImportResponse(
+        summary=summary,
+        created_batches_count=created_batches_count,
+        assigned_to_batches_count=assigned_count,
+    )
+
+
 @router.post("/import-csv", response_model=ImportResponse, status_code=status.HTTP_201_CREATED)
 async def import_contacts_csv(
     request: Request,
@@ -158,6 +227,56 @@ async def import_contacts_csv(
         created_batches_count=created_batches_count,
         assigned_to_batches_count=assigned_count,
     )
+
+
+@router.get("/not-working", response_model=List[ContactOut])
+def list_not_working_contacts(
+    purpose_id: Optional[uuid.UUID] = Query(None),
+    batch_id: Optional[uuid.UUID] = Query(None),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Returns contacts quarantined as 'Not Working' (bounced, invalid domain,
+    or inactive) along with the specific error reasons.
+    """
+    inactive_statuses = ["INVALID_DOMAIN", "BOUNCED", "INACTIVE"]
+    query = (
+        db.query(Contact)
+        .filter(
+            Contact.user_id == current_user.id,
+            (Contact.is_not_working == True) | (Contact.status.in_(inactive_statuses)),
+        )
+    )
+    if purpose_id:
+        query = query.filter(Contact.purpose_id == purpose_id)
+    if batch_id:
+        query = query.filter(Contact.batch_id == batch_id)
+
+    return query.order_by(Contact.updated_at.desc()).offset(offset).limit(limit).all()
+
+
+@router.get("/replacements", response_model=List[ReplacementOut])
+def list_replacements(
+    purpose_id: Optional[uuid.UUID] = Query(None),
+    batch_id: Optional[uuid.UUID] = Query(None),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Returns audit history of quarantined contacts and their automatic replacements.
+    """
+    query = db.query(ContactReplacement).filter(ContactReplacement.user_id == current_user.id)
+    if purpose_id:
+        query = query.filter(ContactReplacement.purpose_id == purpose_id)
+    if batch_id:
+        query = query.filter(ContactReplacement.batch_id == batch_id)
+
+    return query.order_by(ContactReplacement.created_at.desc()).offset(offset).limit(limit).all()
 
 
 @router.get("", response_model=List[ContactOut])

@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy.orm import Session
 
 from apps.worker.interface import JobQueue
-from packages.shared.schema import Batch, User
+from packages.shared.schema import Batch, Contact, DoNotContact, Purpose, User
 
 logger = logging.getLogger("mailorbit.scheduler")
 
@@ -47,6 +47,28 @@ def is_batch_time_reached(batch: Batch, local_dt: datetime) -> bool:
     current_time_str = local_dt.strftime("%H:%M")
     scheduled_time_str = batch.scheduled_time.strip()
     return current_time_str >= scheduled_time_str
+
+
+def is_purpose_date_active(purpose: Optional[Purpose], local_dt: datetime) -> bool:
+    """
+    Checks if a campaign purpose is within its active calendar window:
+    - Verifies start_date has arrived.
+    - Verifies stop_date has not passed.
+    - Verifies today is not listed in skip_dates (holidays/pauses).
+    """
+    if not purpose:
+        return True
+
+    today = local_dt.date()
+    if purpose.start_date and today < purpose.start_date:
+        return False
+    if purpose.stop_date and today > purpose.stop_date:
+        return False
+    if purpose.skip_dates:
+        today_str = today.strftime("%Y-%m-%d")
+        if today_str in purpose.skip_dates:
+            return False
+    return True
 
 
 def evaluate_due_batches_for_user(
@@ -107,6 +129,12 @@ def evaluate_due_batches_for_user(
             earliest_by_purpose[pb.purpose_id] = pb
 
     for purpose_id, candidate in earliest_by_purpose.items():
+        if candidate.purpose_id:
+            purpose = session.query(Purpose).filter(Purpose.id == candidate.purpose_id).first()
+            if not is_purpose_date_active(purpose, local_dt):
+                logger.debug("Purpose %s is not date-active for batch %s today", candidate.purpose_id, candidate.name)
+                continue
+
         if candidate.last_run_date == today_date:
             logger.debug("Batch %s already ran today (%s)", candidate.name, today_date)
             continue

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import List, Optional
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -16,6 +16,12 @@ class PurposeCreate(BaseModel):
     description: Optional[str] = None
     default_subject_template: Optional[str] = None
     default_body_template: Optional[str] = None
+    daily_limit: Optional[int] = 30
+    start_date: Optional[date] = None
+    stop_date: Optional[date] = None
+    skip_dates: Optional[List[str]] = None
+    is_repeating: Optional[bool] = False
+    cooldown_days: Optional[int] = 7
 
 
 class PurposeUpdate(BaseModel):
@@ -23,6 +29,12 @@ class PurposeUpdate(BaseModel):
     description: Optional[str] = None
     default_subject_template: Optional[str] = None
     default_body_template: Optional[str] = None
+    daily_limit: Optional[int] = None
+    start_date: Optional[date] = None
+    stop_date: Optional[date] = None
+    skip_dates: Optional[List[str]] = None
+    is_repeating: Optional[bool] = None
+    cooldown_days: Optional[int] = None
     is_active: Optional[bool] = None
 
 
@@ -33,6 +45,12 @@ class PurposeOut(BaseModel):
     description: Optional[str] = None
     default_subject_template: Optional[str] = None
     default_body_template: Optional[str] = None
+    daily_limit: int = 30
+    start_date: Optional[date] = None
+    stop_date: Optional[date] = None
+    skip_dates: List[str] = []
+    is_repeating: bool = False
+    cooldown_days: int = 7
     is_active: bool
     created_at: datetime
     updated_at: datetime
@@ -52,6 +70,12 @@ def create_purpose(
         description=payload.description,
         default_subject_template=payload.default_subject_template,
         default_body_template=payload.default_body_template,
+        daily_limit=payload.daily_limit or 30,
+        start_date=payload.start_date,
+        stop_date=payload.stop_date,
+        skip_dates=payload.skip_dates or [],
+        is_repeating=payload.is_repeating or False,
+        cooldown_days=payload.cooldown_days or 7,
     )
     db.add(purpose)
     db.commit()
@@ -105,6 +129,18 @@ def update_purpose(
         purpose.default_subject_template = payload.default_subject_template
     if payload.default_body_template is not None:
         purpose.default_body_template = payload.default_body_template
+    if payload.daily_limit is not None:
+        purpose.daily_limit = payload.daily_limit
+    if payload.start_date is not None:
+        purpose.start_date = payload.start_date
+    if payload.stop_date is not None:
+        purpose.stop_date = payload.stop_date
+    if payload.skip_dates is not None:
+        purpose.skip_dates = payload.skip_dates
+    if payload.is_repeating is not None:
+        purpose.is_repeating = payload.is_repeating
+    if payload.cooldown_days is not None:
+        purpose.cooldown_days = payload.cooldown_days
     if payload.is_active is not None:
         purpose.is_active = payload.is_active
 

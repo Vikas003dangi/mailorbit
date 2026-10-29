@@ -37,8 +37,19 @@ import {
   ArrowRight,
   ChevronRight,
   Info,
+  Calendar,
+  Droplets,
+  Paperclip,
+  ShieldAlert,
+  ArrowRightLeft,
 } from "lucide-react";
 import TutorialModal, { TutorialTab } from "./TutorialModal";
+import HighLimitWarningModal from "./components/HighLimitWarningModal";
+import WaterFillVisualizer from "./components/WaterFillVisualizer";
+import QuarantineSection from "./components/QuarantineSection";
+import AiCopilotSection from "./components/AiCopilotSection";
+import DocumentLibrary from "./components/DocumentLibrary";
+import DirectPasteModal from "./components/DirectPasteModal";
 
 const DEFAULT_API_URL = "";
 
@@ -214,7 +225,7 @@ export default function MailOrbitDashboard() {
 
   // Active Navigation Tab
   const [activeTab, setActiveTab] = useState<
-    "overview" | "campaigns" | "contacts" | "ai" | "settings" | "about" | "admin"
+    "overview" | "campaigns" | "contacts" | "ai" | "quarantine" | "settings" | "about" | "admin"
   >("overview");
 
   // Interactive Tutorial / Guide Modal State
@@ -240,6 +251,9 @@ export default function MailOrbitDashboard() {
   const [profile, setProfile] = useState<any>(null);
   const [aiKeys, setAiKeys] = useState<any[]>([]);
   const [relays, setRelays] = useState<any[]>([]);
+  const [attachments, setAttachments] = useState<any[]>([]);
+  const [notWorkingContacts, setNotWorkingContacts] = useState<any[]>([]);
+  const [replacementsAudit, setReplacementsAudit] = useState<any[]>([]);
   const [loadingData, setLoadingData] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
@@ -269,20 +283,41 @@ export default function MailOrbitDashboard() {
   const [relayAuthToken, setRelayAuthToken] = useState("");
   const [relayEmail, setRelayEmail] = useState("");
   const [relaySaving, setRelaySaving] = useState(false);
+  const [dailyCap, setDailyCap] = useState(30);
+  const [showHighCapModal, setShowHighCapModal] = useState(false);
+  const [pendingCapValue, setPendingCapValue] = useState(30);
 
-  // CSV Import State
+  // Lead Ingestion State (CSV & Direct Paste)
+  const [contactImportMode, setContactImportMode] = useState<"csv" | "paste">("csv");
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [importingCsv, setImportingCsv] = useState(false);
   const [importSelectedPurpose, setImportSelectedPurpose] = useState<string>("");
   const [contactSearch, setContactSearch] = useState("");
   const [contactFilter, setContactFilter] = useState("ALL");
+  const [selectedContactIds, setSelectedContactIds] = useState<string[]>([]);
+  const [targetMoveBatchId, setTargetMoveBatchId] = useState<string>("");
+  const [movingContacts, setMovingContacts] = useState(false);
 
-  // New Purpose State
+  // Document Library & Uploads
+  const [uploadingResume, setUploadingResume] = useState(false);
+
+  // Visual Calendar Scheduling on Campaign Purpose
   const [newPurposeName, setNewPurposeName] = useState("");
   const [newPurposeSubject, setNewPurposeSubject] = useState("Quick question regarding engineering at {company}");
   const [newPurposeBody, setNewPurposeBody] = useState(
     "Hi {name},\n\nI noticed your engineering leadership at {company}. As a Python & Generative AI engineer specializing in high-throughput architectures and LLM/RAG pipelines, I would love to connect for 5 minutes."
   );
+  const [newPurposeStartDate, setNewPurposeStartDate] = useState(new Date().toISOString().split("T")[0]);
+  const [newPurposeStopDate, setNewPurposeStopDate] = useState("");
+  const [newPurposeSkipDates, setNewPurposeSkipDates] = useState("");
+  const [newPurposeIsRepeating, setNewPurposeIsRepeating] = useState(false);
+  const [newPurposeCooldownDays, setNewPurposeCooldownDays] = useState(7);
+  const [newPurposeDailyLimit, setNewPurposeDailyLimit] = useState(30);
+  const [newPurposeLinkedAttachment, setNewPurposeLinkedAttachment] = useState<string>("");
+
+  // Water-Filling Auto-Balance
+  const [waterFillAllocations, setWaterFillAllocations] = useState<any[]>([]);
+  const [balancingRunning, setBalancingRunning] = useState(false);
 
   // Auto-Batch Settings
   const [batchSize, setBatchSize] = useState(30);
@@ -344,6 +379,34 @@ export default function MailOrbitDashboard() {
         default_body_template: "Hi {name},\n\nHope this finds you well. Exploring backend opportunities...",
       },
     ]);
+    setAttachments([
+      {
+        id: "demo-att-1",
+        filename: "Vikas_Dangi_Senior_AI_SWE_Resume.pdf",
+        file_url: "#",
+        size_bytes: 142000,
+        content_type: "application/pdf",
+        created_at: new Date().toISOString(),
+      },
+    ]);
+    setNotWorkingContacts([
+      {
+        id: "demo-nw-1",
+        name: "Inactive Contact",
+        email: "dead.lead@nonexistent-domain.xyz",
+        company: "Defunct Corp",
+        error: "DNS MX Failure / NXDOMAIN",
+      },
+    ]);
+    setReplacementsAudit([
+      {
+        id: "demo-rep-1",
+        original_email: "dead.lead@nonexistent-domain.xyz",
+        replaced_by_email: "active.lead@goodtech.io",
+        reason: "Pre-send DNS verification failed; replaced on-the-fly to fulfill 30/day target",
+        created_at: new Date().toISOString(),
+      },
+    ]);
     localStorage.setItem("mailorbit_demo", "true");
   };
 
@@ -381,7 +444,7 @@ export default function MailOrbitDashboard() {
     if (!token || isDemoMode) return;
     setLoadingData(true);
     try {
-      const [userRes, profRes, purpRes, batchRes, contRes, aiRes, relayRes] = await Promise.all([
+      const [userRes, profRes, purpRes, batchRes, contRes, aiRes, relayRes, attRes, nwRes, repRes] = await Promise.all([
         apiFetch("/api/v1/auth/me"),
         apiFetch("/api/v1/profile"),
         apiFetch("/api/v1/purposes"),
@@ -389,6 +452,9 @@ export default function MailOrbitDashboard() {
         apiFetch("/api/v1/contacts?limit=200"),
         apiFetch("/api/v1/ai-keys"),
         apiFetch("/api/v1/senders"),
+        apiFetch("/api/v1/attachments"),
+        apiFetch("/api/v1/contacts/not-working"),
+        apiFetch("/api/v1/contacts/replacements"),
       ]);
 
       if (userRes.ok) {
@@ -408,7 +474,16 @@ export default function MailOrbitDashboard() {
       if (batchRes.ok) setBatches(await batchRes.json());
       if (contRes.ok) setContacts(await contRes.json());
       if (aiRes.ok) setAiKeys(await aiRes.json());
-      if (relayRes.ok) setRelays(await relayRes.json());
+      if (relayRes.ok) {
+        const rData = await relayRes.json();
+        setRelays(rData);
+        if (rData.length > 0 && rData[0].daily_cap) {
+          setDailyCap(rData[0].daily_cap);
+        }
+      }
+      if (attRes.ok) setAttachments(await attRes.json());
+      if (nwRes.ok) setNotWorkingContacts(await nwRes.json());
+      if (repRes.ok) setReplacementsAudit(await repRes.json());
     } catch (err) {
       console.error("Failed loading data", err);
     } finally {
@@ -606,10 +681,14 @@ export default function MailOrbitDashboard() {
         name: newPurposeName.trim(),
         default_subject_template: newPurposeSubject,
         default_body_template: newPurposeBody,
+        start_date: newPurposeStartDate || null,
+        stop_date: newPurposeStopDate || null,
+        is_repeating: newPurposeIsRepeating,
+        daily_limit: newPurposeDailyLimit || 30,
       };
       setPurposes([...purposes, mockP]);
       setNewPurposeName("");
-      setStatusMessage("[DEMO] Campaign purpose created successfully!");
+      setStatusMessage("[DEMO] Campaign purpose created with calendar schedule!");
       return;
     }
 
@@ -621,12 +700,29 @@ export default function MailOrbitDashboard() {
           name: newPurposeName.trim(),
           default_subject_template: newPurposeSubject,
           default_body_template: newPurposeBody,
+          start_date: newPurposeStartDate || null,
+          stop_date: newPurposeStopDate || null,
+          skip_dates: newPurposeSkipDates ? newPurposeSkipDates.split(",").map((s) => s.trim()).filter(Boolean) : null,
+          is_repeating: newPurposeIsRepeating,
+          cooldown_days: newPurposeCooldownDays,
+          daily_limit: newPurposeDailyLimit,
         }),
       });
       if (res.ok) {
+        const createdP = await res.json();
+        // If an attachment was linked, link it now
+        if (newPurposeLinkedAttachment && createdP.id) {
+          try {
+            await apiFetch(`/api/v1/purposes/${createdP.id}/attachments/${newPurposeLinkedAttachment}`, {
+              method: "POST",
+            });
+          } catch (e) {
+            console.error("Failed linking attachment", e);
+          }
+        }
         setNewPurposeName("");
         loadAllData();
-        setStatusMessage("Campaign purpose created successfully!");
+        setStatusMessage("Campaign purpose created with calendar schedule & resume link!");
       }
     } catch (err) {
       console.error(err);
@@ -844,6 +940,235 @@ export default function MailOrbitDashboard() {
     } finally {
       setRelaySaving(false);
     }
+  };
+
+  const handlePasteImportSubmit = async (rawText: string, purposeId: string, size: number, autoBatch: boolean) => {
+    if (!rawText.trim()) return;
+
+    if (isDemoMode) {
+      setStatusMessage(`[DEMO] Imported paste leads: created new sub-batch.`);
+      return;
+    }
+
+    try {
+      const res = await apiFetch("/api/v1/contacts/paste", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          raw_text: rawText,
+          purpose_id: purposeId || null,
+          batch_size: size,
+          auto_batch: autoBatch,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setStatusMessage(`Paste Import: ${data.created_count} contacts added (${data.duplicate_count} skipped).`);
+        loadAllData();
+      } else {
+        const err = await res.json();
+        setStatusMessage(`Paste Import Error: ${err.detail || "Failed to parse leads"}`);
+      }
+    } catch (err: any) {
+      setStatusMessage(`Error: ${err.message}`);
+    }
+  };
+
+  const handleMoveContacts = async () => {
+    if (!targetMoveBatchId || selectedContactIds.length === 0) return;
+
+    if (isDemoMode) {
+      setStatusMessage(`[DEMO] Moved ${selectedContactIds.length} contact(s) to target sub-batch.`);
+      setSelectedContactIds([]);
+      return;
+    }
+
+    setMovingContacts(true);
+    try {
+      const res = await apiFetch(`/api/v1/batches/${targetMoveBatchId}/move-contacts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contact_ids: selectedContactIds }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setStatusMessage(`Successfully moved ${data.moved_count} contact(s) to selected batch!`);
+        setSelectedContactIds([]);
+        loadAllData();
+      } else {
+        const err = await res.json();
+        setStatusMessage(`Move Error: ${err.detail}`);
+      }
+    } catch (err: any) {
+      setStatusMessage(`Error: ${err.message}`);
+    } finally {
+      setMovingContacts(false);
+    }
+  };
+
+  const handleReactivateContact = async (contactId: string) => {
+    if (isDemoMode) {
+      setNotWorkingContacts(notWorkingContacts.filter((c) => c.id !== contactId));
+      setStatusMessage("[DEMO] Lead reactivated and returned to pending pool.");
+      return;
+    }
+    try {
+      const res = await apiFetch(`/api/v1/contacts/${contactId}/reactivate`, { method: "POST" });
+      if (res.ok) {
+        setStatusMessage("Contact reactivated and returned to active pool.");
+        loadAllData();
+      }
+    } catch (err: any) {
+      setStatusMessage(`Reactivation failed: ${err.message}`);
+    }
+  };
+
+  const handleAutoBalance = async () => {
+    if (isDemoMode) {
+      setStatusMessage("[DEMO] Water-filling balanced: active sub-batches allocated fair share of 30 emails today.");
+      return;
+    }
+    setBalancingRunning(true);
+    try {
+      const res = await apiFetch("/api/v1/batches/auto-balance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ daily_budget: dailyCap }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setWaterFillAllocations(data.allocations || []);
+        setStatusMessage(`Water-fill balanced ${data.batches_evaluated} batches across ${data.total_budget} daily emails!`);
+        loadAllData();
+      }
+    } catch (err: any) {
+      setStatusMessage(`Balance error: ${err.message}`);
+    } finally {
+      setBalancingRunning(false);
+    }
+  };
+
+  const handleUploadResume = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (isDemoMode) {
+      const mockAtt = {
+        id: `demo-att-${Date.now()}`,
+        filename: file.name,
+        file_url: "#",
+        size_bytes: file.size,
+        content_type: file.type || "application/pdf",
+        created_at: new Date().toISOString(),
+      };
+      setAttachments([mockAtt, ...attachments]);
+      setStatusMessage(`[DEMO] Uploaded resume: ${file.name}`);
+      return;
+    }
+
+    setUploadingResume(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch(`${apiUrl}/api/v1/attachments/upload`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setStatusMessage(`Resume uploaded to private Cloudinary storage: ${data.filename}`);
+        loadAllData();
+      } else {
+        const err = await res.json();
+        setStatusMessage(`Upload failed: ${err.detail}`);
+      }
+    } catch (err: any) {
+      setStatusMessage(`Upload error: ${err.message}`);
+    } finally {
+      setUploadingResume(false);
+    }
+  };
+
+  const handleDeleteResume = async (attachmentId: string) => {
+    if (isDemoMode) {
+      setAttachments(attachments.filter((a) => a.id !== attachmentId));
+      setStatusMessage("[DEMO] Document removed.");
+      return;
+    }
+    try {
+      const res = await apiFetch(`/api/v1/attachments/${attachmentId}`, { method: "DELETE" });
+      if (res.ok) {
+        setStatusMessage("Resume deleted from Cloudinary storage.");
+        loadAllData();
+      }
+    } catch (err: any) {
+      setStatusMessage(`Delete error: ${err.message}`);
+    }
+  };
+
+  const handleCopilotDraft = async (params: any) => {
+    if (isDemoMode) {
+      return {
+        subject: "Senior AI / Backend Engineer Role - Vikas Dangi",
+        body_text:
+          "Hi there,\n\nI noticed your team's engineering work and wanted to reach out regarding the Senior Engineering role.\n\nMy background includes building high-throughput asynchronous architectures in Python and FastAPI, Generative AI agent workflows, and distributed PostgreSQL data pipelines. I have attached my resume for your review.\n\nWould you be open to a quick 10-minute introductory conversation this week?\n\nBest regards,\nVikas Dangi",
+        match_score: 92,
+        matched_skills: ["Python", "FastAPI", "PostgreSQL", "Generative AI", "Docker"],
+        missing_skills: ["Kubernetes Admin"],
+        provider: "gemini",
+      };
+    }
+    const res = await apiFetch("/api/v1/ai/draft", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(params),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || "Drafting request failed");
+    }
+    return await res.json();
+  };
+
+  const handleCopilotSend = async (sendNow: boolean, params: any) => {
+    if (isDemoMode) {
+      return {
+        status: sendNow ? "SENT" : "SCHEDULED",
+        sent_count: params.recipients.length,
+        remaining_quota: 480,
+        message: sendNow
+          ? `Delivered ${params.recipients.length} email(s) via Google Apps Script Relay.`
+          : `Scheduled ${params.recipients.length} leads into campaign batch for 30/day fair-share dispatch.`,
+      };
+    }
+    const res = await apiFetch("/api/v1/ai/quick-send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...params, send_now: sendNow }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || "Quick send request failed");
+    }
+    loadAllData();
+    return await res.json();
+  };
+
+  const handleCapSliderChange = (newVal: number) => {
+    if (newVal > 30) {
+      setPendingCapValue(newVal);
+      setShowHighCapModal(true);
+    } else {
+      setDailyCap(newVal);
+    }
+  };
+
+  const confirmHighDailyCap = () => {
+    setDailyCap(pendingCapValue);
+    setShowHighCapModal(false);
+    setStatusMessage(`Warning acknowledged: Daily limit adjusted to ${pendingCapValue}/day.`);
   };
 
   const filteredContacts = contacts.filter((c) => {
@@ -1128,7 +1453,7 @@ export default function MailOrbitDashboard() {
                 }}
               >
                 <Layers size={16} />
-                Campaigns & Batches
+                Campaigns & Calendar
               </button>
 
               <button
@@ -1149,7 +1474,7 @@ export default function MailOrbitDashboard() {
                 }}
               >
                 <Mail size={16} />
-                Leads & CSV Import
+                Leads & Batches
               </button>
 
               <button
@@ -1170,7 +1495,28 @@ export default function MailOrbitDashboard() {
                 }}
               >
                 <Sparkles size={16} />
-                AI Personalizer & JD
+                AI Helping Hand & Send
+              </button>
+
+              <button
+                onClick={() => setActiveTab("quarantine")}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "10px",
+                  padding: "9px 12px",
+                  borderRadius: "6px",
+                  background: activeTab === "quarantine" ? "#1e293b" : "transparent",
+                  color: activeTab === "quarantine" ? "#f87171" : "#94a3b8",
+                  border: "none",
+                  textAlign: "left",
+                  fontSize: "0.88rem",
+                  fontWeight: activeTab === "quarantine" ? 600 : 500,
+                  cursor: "pointer",
+                }}
+              >
+                <ShieldCheck size={16} />
+                Quarantine ({notWorkingContacts.length})
               </button>
 
               <button
@@ -1191,7 +1537,7 @@ export default function MailOrbitDashboard() {
                 }}
               >
                 <Key size={16} />
-                Sender Relay & Keys
+                Relay, Resumes & Profile
               </button>
 
               <div style={{ height: "1px", background: "#1e293b", margin: "14px 0 10px" }} />
@@ -1678,6 +2024,15 @@ export default function MailOrbitDashboard() {
                     </div>
                   </div>
 
+                  {/* Water-Filling Fair Share Allocator */}
+                  <WaterFillVisualizer
+                    batches={batches}
+                    dailyBudget={dailyCap}
+                    allocations={waterFillAllocations}
+                    onRunAutoBalance={handleAutoBalance}
+                    loading={balancingRunning}
+                  />
+
                   {/* Daily Pacing Timeline */}
                   <div style={{ background: "#111827", padding: "24px", borderRadius: "12px", border: "1px solid #1f2937", marginBottom: "32px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "18px" }}>
@@ -1806,12 +2161,15 @@ export default function MailOrbitDashboard() {
                     </button>
                   </div>
 
-                  {/* Create Purpose Section */}
+                  {/* Create Purpose Section with Calendar Scheduling & Resume Link */}
                   <div style={{ background: "#111827", padding: "22px", borderRadius: "10px", border: "1px solid #1f2937", marginBottom: "28px" }}>
-                    <h3 style={{ margin: "0 0 16px", fontSize: "1.1rem" }}>Create New Campaign Purpose</h3>
+                    <h3 style={{ margin: "0 0 16px", fontSize: "1.1rem", display: "flex", alignItems: "center", gap: "8px" }}>
+                      <Calendar size={18} color="#38bdf8" />
+                      Create New Campaign Purpose with Calendar Scheduling
+                    </h3>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "14px" }}>
                       <div>
-                        <label style={{ display: "block", fontSize: "0.82rem", color: "#9ca3af", marginBottom: "4px" }}>Purpose Name</label>
+                        <label style={{ display: "block", fontSize: "0.82rem", color: "#9ca3af", marginBottom: "4px" }}>Purpose / Campaign Name</label>
                         <input
                           type="text"
                           value={newPurposeName}
@@ -1830,6 +2188,7 @@ export default function MailOrbitDashboard() {
                         />
                       </div>
                     </div>
+
                     <div style={{ marginBottom: "14px" }}>
                       <label style={{ display: "block", fontSize: "0.82rem", color: "#9ca3af", marginBottom: "4px" }}>Body Template</label>
                       <textarea
@@ -1839,11 +2198,77 @@ export default function MailOrbitDashboard() {
                         style={{ width: "100%", padding: "10px", borderRadius: "6px", background: "#1f2937", border: "1px solid #374151", color: "#ffffff", boxSizing: "border-box", fontFamily: "inherit" }}
                       />
                     </div>
+
+                    {/* Calendar Range & Repeat Loop Row */}
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "14px", marginBottom: "16px", background: "rgba(15, 23, 42, 0.6)", padding: "14px", borderRadius: "8px", border: "1px solid #1e293b" }}>
+                      <div>
+                        <label style={{ display: "block", fontSize: "0.78rem", color: "#9ca3af", marginBottom: "4px" }}>Start Date</label>
+                        <input
+                          type="date"
+                          value={newPurposeStartDate}
+                          onChange={(e) => setNewPurposeStartDate(e.target.value)}
+                          style={{ width: "100%", padding: "8px", borderRadius: "6px", background: "#1f2937", border: "1px solid #374151", color: "#ffffff", fontSize: "0.82rem", boxSizing: "border-box" }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: "block", fontSize: "0.78rem", color: "#9ca3af", marginBottom: "4px" }}>Stop Date (Optional)</label>
+                        <input
+                          type="date"
+                          value={newPurposeStopDate}
+                          onChange={(e) => setNewPurposeStopDate(e.target.value)}
+                          style={{ width: "100%", padding: "8px", borderRadius: "6px", background: "#1f2937", border: "1px solid #374151", color: "#ffffff", fontSize: "0.82rem", boxSizing: "border-box" }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: "block", fontSize: "0.78rem", color: "#9ca3af", marginBottom: "4px" }}>Link Uploaded Resume</label>
+                        <select
+                          value={newPurposeLinkedAttachment}
+                          onChange={(e) => setNewPurposeLinkedAttachment(e.target.value)}
+                          style={{ width: "100%", padding: "8px", borderRadius: "6px", background: "#1f2937", border: "1px solid #374151", color: "#ffffff", fontSize: "0.82rem" }}
+                        >
+                          <option value="">No attachment</option>
+                          {attachments.map((att) => (
+                            <option key={att.id} value={att.id}>
+                              {att.filename}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Skip Dates and Repeat Loop */}
+                    <div style={{ display: "flex", gap: "20px", alignItems: "center", marginBottom: "18px", flexWrap: "wrap" }}>
+                      <div style={{ flex: 1 }}>
+                        <label style={{ display: "block", fontSize: "0.78rem", color: "#9ca3af", marginBottom: "4px" }}>
+                          Skip Dates (comma-separated holidays: e.g. 2026-11-26, 2026-12-25)
+                        </label>
+                        <input
+                          type="text"
+                          value={newPurposeSkipDates}
+                          onChange={(e) => setNewPurposeSkipDates(e.target.value)}
+                          placeholder="YYYY-MM-DD, YYYY-MM-DD"
+                          style={{ width: "100%", padding: "8px", borderRadius: "6px", background: "#1f2937", border: "1px solid #374151", color: "#ffffff", fontSize: "0.82rem", boxSizing: "border-box" }}
+                        />
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", paddingTop: "14px" }}>
+                        <input
+                          type="checkbox"
+                          id="repeatLoopCheck"
+                          checked={newPurposeIsRepeating}
+                          onChange={(e) => setNewPurposeIsRepeating(e.target.checked)}
+                          style={{ cursor: "pointer", width: "16px", height: "16px" }}
+                        />
+                        <label htmlFor="repeatLoopCheck" style={{ fontSize: "0.82rem", color: "#e2e8f0", cursor: "pointer" }}>
+                          Repeat Round Loop (after 7-day cooldown)
+                        </label>
+                      </div>
+                    </div>
+
                     <button
                       onClick={handleCreatePurpose}
                       style={{ background: "#0284c7", color: "#ffffff", border: "none", padding: "10px 18px", borderRadius: "6px", cursor: "pointer", fontWeight: 600 }}
                     >
-                      Save Campaign Purpose
+                      Save Campaign Purpose & Schedule
                     </button>
                   </div>
 
@@ -1870,64 +2295,159 @@ export default function MailOrbitDashboard() {
                 </div>
               )}
 
-              {/* Leads & CSV Import Tab */}
+              {/* Leads & CSV / Paste Import Tab */}
               {activeTab === "contacts" && (
                 <div>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "24px", flexWrap: "wrap", gap: "16px" }}>
                     <div>
-                      <h1 style={{ fontSize: "1.75rem", fontWeight: 700, margin: "0 0 6px" }}>Leads & CSV Import</h1>
+                      <h1 style={{ fontSize: "1.75rem", fontWeight: 700, margin: "0 0 6px" }}>Leads & Batch Organization</h1>
                       <p style={{ color: "#94a3b8", fontSize: "0.92rem", margin: 0 }}>
-                        Upload contacts CSV with automated column normalization, deduplication, and replacement fallback.
+                        Flexible lead ingestion via CSV upload or direct text paste, with auto-batching and batch rebalancing.
                       </p>
                     </div>
-                    <button
-                      onClick={() => openTutorial("contacts")}
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "8px",
-                        background: "rgba(56, 189, 248, 0.12)",
-                        border: "1px solid #0284c7",
-                        color: "#38bdf8",
-                        padding: "9px 16px",
-                        borderRadius: "8px",
-                        fontWeight: 600,
-                        fontSize: "0.85rem",
-                        cursor: "pointer",
-                      }}
-                    >
-                      <BookOpen size={16} />
-                      📘 Leads CSV & Replacement Guide
-                    </button>
-                  </div>
 
-                  {/* Upload Box */}
-                  <form onSubmit={handleUploadCsv} style={{ background: "#111827", padding: "20px", borderRadius: "10px", border: "1px solid #1f2937", marginBottom: "28px" }}>
-                    <h3 style={{ margin: "0 0 14px", fontSize: "1.05rem" }}>Upload Leads CSV</h3>
-                    <div style={{ display: "flex", gap: "16px", alignItems: "center", marginBottom: "14px" }}>
-                      <input
-                        type="file"
-                        accept=".csv"
-                        onChange={(e) => setCsvFile(e.target.files ? e.target.files[0] : null)}
-                        style={{ padding: "8px", background: "#1f2937", borderRadius: "6px", border: "1px solid #374151", color: "#9ca3af", flex: 1 }}
-                      />
+                    <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                      <div style={{ display: "flex", background: "#111827", padding: "4px", borderRadius: "8px", border: "1px solid #1f2937" }}>
+                        <button
+                          onClick={() => setContactImportMode("csv")}
+                          style={{
+                            background: contactImportMode === "csv" ? "#0284c7" : "transparent",
+                            color: contactImportMode === "csv" ? "#ffffff" : "#94a3b8",
+                            border: "none",
+                            padding: "7px 14px",
+                            borderRadius: "6px",
+                            fontSize: "0.82rem",
+                            fontWeight: 600,
+                            cursor: "pointer",
+                          }}
+                        >
+                          CSV File Upload
+                        </button>
+                        <button
+                          onClick={() => setContactImportMode("paste")}
+                          style={{
+                            background: contactImportMode === "paste" ? "#0284c7" : "transparent",
+                            color: contactImportMode === "paste" ? "#ffffff" : "#94a3b8",
+                            border: "none",
+                            padding: "7px 14px",
+                            borderRadius: "6px",
+                            fontSize: "0.82rem",
+                            fontWeight: 600,
+                            cursor: "pointer",
+                          }}
+                        >
+                          Direct Text Paste
+                        </button>
+                      </div>
+
                       <button
-                        type="submit"
-                        disabled={!csvFile || importingCsv}
+                        onClick={() => openTutorial("contacts")}
                         style={{
-                          background: importingCsv ? "#0369a1" : "#0284c7",
-                          color: "#ffffff",
-                          border: "none",
-                          padding: "10px 20px",
-                          borderRadius: "6px",
-                          cursor: importingCsv || !csvFile ? "not-allowed" : "pointer",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "8px",
+                          background: "rgba(56, 189, 248, 0.12)",
+                          border: "1px solid #0284c7",
+                          color: "#38bdf8",
+                          padding: "9px 16px",
+                          borderRadius: "8px",
                           fontWeight: 600,
+                          fontSize: "0.85rem",
+                          cursor: "pointer",
                         }}
                       >
-                        {importingCsv ? "Importing..." : "Process CSV"}
+                        <BookOpen size={16} />
+                        📘 Leads Guide
                       </button>
                     </div>
-                  </form>
+                  </div>
+
+                  {/* Mode 1: Direct Paste Text Area */}
+                  {contactImportMode === "paste" ? (
+                    <DirectPasteModal
+                      purposes={purposes}
+                      selectedPurposeId={importSelectedPurpose}
+                      onSelectPurpose={setImportSelectedPurpose}
+                      onSubmit={handlePasteImportSubmit}
+                    />
+                  ) : (
+                    /* Mode 2: CSV Upload Box */
+                    <form onSubmit={handleUploadCsv} style={{ background: "#111827", padding: "20px", borderRadius: "10px", border: "1px solid #1f2937", marginBottom: "28px" }}>
+                      <h3 style={{ margin: "0 0 14px", fontSize: "1.05rem" }}>Upload Leads CSV</h3>
+                      <div style={{ display: "flex", gap: "16px", alignItems: "center", marginBottom: "14px" }}>
+                        <input
+                          type="file"
+                          accept=".csv"
+                          onChange={(e) => setCsvFile(e.target.files ? e.target.files[0] : null)}
+                          style={{ padding: "8px", background: "#1f2937", borderRadius: "6px", border: "1px solid #374151", color: "#9ca3af", flex: 1 }}
+                        />
+                        <button
+                          type="submit"
+                          disabled={!csvFile || importingCsv}
+                          style={{
+                            background: importingCsv ? "#0369a1" : "#0284c7",
+                            color: "#ffffff",
+                            border: "none",
+                            padding: "10px 20px",
+                            borderRadius: "6px",
+                            cursor: importingCsv || !csvFile ? "not-allowed" : "pointer",
+                            fontWeight: 600,
+                          }}
+                        >
+                          {importingCsv ? "Importing..." : "Process CSV"}
+                        </button>
+                      </div>
+                    </form>
+                  )}
+
+                  {/* Move Contacts Action Bar */}
+                  {selectedContactIds.length > 0 && (
+                    <div style={{ background: "rgba(14, 165, 233, 0.12)", border: "1px solid #0284c7", borderRadius: "8px", padding: "12px 18px", marginBottom: "18px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
+                      <span style={{ fontSize: "0.88rem", fontWeight: 600, color: "#38bdf8" }}>
+                        {selectedContactIds.length} contact(s) selected
+                      </span>
+                      <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                        <select
+                          value={targetMoveBatchId}
+                          onChange={(e) => setTargetMoveBatchId(e.target.value)}
+                          style={{ padding: "8px 12px", borderRadius: "6px", background: "#1f2937", border: "1px solid #374151", color: "#ffffff", fontSize: "0.82rem" }}
+                        >
+                          <option value="">Select Target Batch...</option>
+                          {batches.map((b) => (
+                            <option key={b.id} value={b.id}>
+                              {b.name || `Batch #${b.batch_number}`} ({b.status})
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          onClick={handleMoveContacts}
+                          disabled={!targetMoveBatchId || movingContacts}
+                          style={{
+                            background: "#0284c7",
+                            color: "#ffffff",
+                            border: "none",
+                            padding: "8px 16px",
+                            borderRadius: "6px",
+                            fontWeight: 600,
+                            fontSize: "0.82rem",
+                            cursor: !targetMoveBatchId || movingContacts ? "not-allowed" : "pointer",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "6px",
+                          }}
+                        >
+                          <ArrowRightLeft size={14} />
+                          {movingContacts ? "Moving..." : "Move to Batch"}
+                        </button>
+                        <button
+                          onClick={() => setSelectedContactIds([])}
+                          style={{ background: "transparent", border: "none", color: "#94a3b8", fontSize: "0.82rem", cursor: "pointer" }}
+                        >
+                          Deselect All
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Leads Filter & Search Table */}
                   <div style={{ background: "#111827", padding: "20px", borderRadius: "10px", border: "1px solid #1f2937" }}>
@@ -1967,6 +2487,20 @@ export default function MailOrbitDashboard() {
                     <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
                       <thead>
                         <tr style={{ borderBottom: "1px solid #1f2937", color: "#9ca3af", textAlign: "left" }}>
+                          <th style={{ padding: "10px", width: "36px" }}>
+                            <input
+                              type="checkbox"
+                              checked={filteredContacts.length > 0 && selectedContactIds.length === filteredContacts.length}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedContactIds(filteredContacts.map((c) => c.id));
+                                } else {
+                                  setSelectedContactIds([]);
+                                }
+                              }}
+                              style={{ cursor: "pointer" }}
+                            />
+                          </th>
                           <th style={{ padding: "10px" }}>Name</th>
                           <th style={{ padding: "10px" }}>Email</th>
                           <th style={{ padding: "10px" }}>Company</th>
@@ -1977,6 +2511,20 @@ export default function MailOrbitDashboard() {
                       <tbody>
                         {filteredContacts.map((c) => (
                           <tr key={c.id} style={{ borderBottom: "1px solid #1f2937" }}>
+                            <td style={{ padding: "10px" }}>
+                              <input
+                                type="checkbox"
+                                checked={selectedContactIds.includes(c.id)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedContactIds([...selectedContactIds, c.id]);
+                                  } else {
+                                    setSelectedContactIds(selectedContactIds.filter((id) => id !== c.id));
+                                  }
+                                }}
+                                style={{ cursor: "pointer" }}
+                              />
+                            </td>
                             <td style={{ padding: "10px", fontWeight: 600 }}>{c.name}</td>
                             <td style={{ padding: "10px", color: "#94a3b8" }}>{c.email}</td>
                             <td style={{ padding: "10px" }}>{c.company}</td>
@@ -2010,132 +2558,42 @@ export default function MailOrbitDashboard() {
                 </div>
               )}
 
-              {/* AI Personalizer & JD Matcher Tab */}
+              {/* AI Copilot & Quick Send Tab */}
               {activeTab === "ai" && (
-                <div>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "24px", flexWrap: "wrap", gap: "16px" }}>
-                    <div>
-                      <h1 style={{ fontSize: "1.75rem", fontWeight: 700, margin: "0 0 6px" }}>AI Personalizer & JD Matcher</h1>
-                      <p style={{ color: "#94a3b8", fontSize: "0.92rem", margin: 0 }}>
-                        Bring Your Own Gemini API Key (BYOK) to scan resumes, extract skills, and generate tailored cold-email icebreakers.
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => openTutorial("ai")}
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "8px",
-                        background: "rgba(56, 189, 248, 0.12)",
-                        border: "1px solid #0284c7",
-                        color: "#38bdf8",
-                        padding: "9px 16px",
-                        borderRadius: "8px",
-                        fontWeight: 600,
-                        fontSize: "0.85rem",
-                        cursor: "pointer",
-                      }}
-                    >
-                      <BookOpen size={16} />
-                      📘 Gemini BYOK & Prompting Guide
-                    </button>
-                  </div>
-
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px", marginBottom: "32px" }}>
-                    {/* Gemini Key Config */}
-                    <div style={{ background: "#111827", padding: "20px", borderRadius: "10px", border: "1px solid #1f2937" }}>
-                      <h3 style={{ margin: "0 0 12px", fontSize: "1.05rem" }}>Configure Gemini Key (BYOK)</h3>
-                      <div style={{ marginBottom: "12px" }}>
-                        <label style={{ display: "block", fontSize: "0.82rem", color: "#9ca3af", marginBottom: "4px" }}>
-                          Gemini API Key
-                        </label>
-                        <input
-                          type="password"
-                          value={newGeminiKey}
-                          onChange={(e) => setNewGeminiKey(e.target.value)}
-                          placeholder="AIzaSy..."
-                          style={{ width: "100%", padding: "10px", borderRadius: "6px", background: "#1f2937", border: "1px solid #374151", color: "#ffffff", boxSizing: "border-box" }}
-                        />
-                      </div>
-                      <div style={{ marginBottom: "16px" }}>
-                        <label style={{ display: "block", fontSize: "0.82rem", color: "#9ca3af", marginBottom: "4px" }}>
-                          Target Model
-                        </label>
-                        <select
-                          value={keyModel}
-                          onChange={(e) => setKeyModel(e.target.value)}
-                          style={{ width: "100%", padding: "10px", borderRadius: "6px", background: "#1f2937", border: "1px solid #374151", color: "#ffffff", boxSizing: "border-box" }}
-                        >
-                          <option value="gemini-2.5-flash">Gemini 2.5 Flash (Recommended - Fastest)</option>
-                          <option value="gemini-1.5-pro">Gemini 1.5 Pro (Deep Tailoring)</option>
-                        </select>
-                      </div>
-                      <button
-                        onClick={handleSaveGeminiKey}
-                        disabled={keySaving}
-                        style={{ background: "#0284c7", color: "#ffffff", border: "none", padding: "10px 18px", borderRadius: "6px", cursor: "pointer", fontWeight: 600 }}
-                      >
-                        {keySaving ? "Validating & Encrypting..." : "Save Encrypted Key"}
-                      </button>
-                    </div>
-
-                    {/* Resume Matcher */}
-                    <div style={{ background: "#111827", padding: "20px", borderRadius: "10px", border: "1px solid #1f2937" }}>
-                      <h3 style={{ margin: "0 0 12px", fontSize: "1.05rem" }}>Match Candidate Profile against JD</h3>
-                      <div style={{ marginBottom: "12px" }}>
-                        <label style={{ display: "block", fontSize: "0.82rem", color: "#9ca3af", marginBottom: "4px" }}>
-                          Paste Target Job Description (JD)
-                        </label>
-                        <textarea
-                          rows={4}
-                          value={jdText}
-                          onChange={(e) => setJdText(e.target.value)}
-                          placeholder="We are looking for a Senior Python & GenAI Engineer experienced in RAG..."
-                          style={{ width: "100%", padding: "10px", borderRadius: "6px", background: "#1f2937", border: "1px solid #374151", color: "#ffffff", boxSizing: "border-box", fontFamily: "inherit" }}
-                        />
-                      </div>
-                      <button
-                        onClick={handleMatchJd}
-                        disabled={jdMatching || !jdText.trim()}
-                        style={{ background: "#7c3aed", color: "#ffffff", border: "none", padding: "10px 18px", borderRadius: "6px", cursor: "pointer", fontWeight: 600 }}
-                      >
-                        {jdMatching ? "Analyzing Fit..." : "Generate Custom Pitch"}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* AI Results */}
-                  {jdMatchResult && (
-                    <div style={{ background: "#111827", padding: "24px", borderRadius: "10px", border: "1px solid #7c3aed" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
-                        <h3 style={{ margin: 0, fontSize: "1.1rem" }}>Tailored Match Analysis</h3>
-                        <span style={{ fontSize: "1rem", fontWeight: 700, color: "#a855f7" }}>
-                          Match Score: {jdMatchResult.match_score}%
-                        </span>
-                      </div>
-                      <div style={{ marginBottom: "14px" }}>
-                        <div style={{ fontSize: "0.82rem", color: "#9ca3af", marginBottom: "4px" }}>Suggested Subject Line:</div>
-                        <div style={{ fontWeight: 600, color: "#38bdf8" }}>{jdMatchResult.suggested_subject}</div>
-                      </div>
-                      <div>
-                        <div style={{ fontSize: "0.82rem", color: "#9ca3af", marginBottom: "4px" }}>Personalized Email Pitch:</div>
-                        <div style={{ background: "#1f2937", padding: "14px", borderRadius: "6px", fontSize: "0.88rem", whiteSpace: "pre-wrap", color: "#e2e8f0" }}>
-                          {jdMatchResult.personalized_pitch}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
+                <AiCopilotSection
+                  profile={profile}
+                  aiKeys={aiKeys}
+                  attachments={attachments}
+                  onDraft={handleCopilotDraft}
+                  onSend={handleCopilotSend}
+                  onSaveKey={async (k, m) => {
+                    setNewGeminiKey(k);
+                    setKeyModel(m);
+                    await handleSaveGeminiKey();
+                  }}
+                  onOpenTutorial={openTutorial}
+                  isDemoMode={isDemoMode}
+                />
               )}
 
-              {/* Sender Relay & Keys Tab */}
+              {/* Quarantine & Replacements Tab */}
+              {activeTab === "quarantine" && (
+                <QuarantineSection
+                  notWorkingContacts={notWorkingContacts}
+                  replacements={replacementsAudit}
+                  onReactivate={handleReactivateContact}
+                  isDemoMode={isDemoMode}
+                />
+              )}
+
+              {/* Sender Relay, Resumes & Settings Tab */}
               {activeTab === "settings" && (
                 <div>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "24px", flexWrap: "wrap", gap: "16px" }}>
                     <div>
-                      <h1 style={{ fontSize: "1.75rem", fontWeight: 700, margin: "0 0 6px" }}>Sender Relay & Keys</h1>
+                      <h1 style={{ fontSize: "1.75rem", fontWeight: 700, margin: "0 0 6px" }}>Sender Relay, Resumes & Profile</h1>
                       <p style={{ color: "#94a3b8", fontSize: "0.92rem", margin: 0 }}>
-                        Configure your zero-password Google Apps Script egress relay over HTTPS:443 with safety circuit breaker.
+                        Configure your zero-password Google Apps Script egress relay, upload resumes to Cloudinary, and manage daily sending limits.
                       </p>
                     </div>
                     <button
@@ -2160,7 +2618,56 @@ export default function MailOrbitDashboard() {
                     </button>
                   </div>
 
-                  <div style={{ maxWidth: "600px", background: "#111827", padding: "24px", borderRadius: "10px", border: "1px solid #1f2937" }}>
+                  {/* Daily Limit Slider Card with >30 Warning Guard */}
+                  <div style={{ background: "#111827", padding: "20px 24px", borderRadius: "12px", border: "1px solid #1f2937", marginBottom: "24px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                      <div>
+                        <h3 style={{ margin: "0 0 4px", fontSize: "1.05rem", fontWeight: 600 }}>Daily Sending Cap (Single Sender)</h3>
+                        <p style={{ margin: 0, fontSize: "0.82rem", color: "#9ca3af" }}>
+                          Total combined emails sent per day across all active campaigns and sub-batches.
+                        </p>
+                      </div>
+                      <span style={{ fontSize: "1.1rem", fontWeight: 800, color: dailyCap <= 30 ? "#38bdf8" : "#fbbf24", background: "rgba(15, 23, 42, 0.8)", padding: "4px 12px", borderRadius: "6px", border: "1px solid #334155" }}>
+                        {dailyCap} emails / day
+                      </span>
+                    </div>
+
+                    <div style={{ marginTop: "12px", marginBottom: "8px" }}>
+                      <input
+                        type="range"
+                        min={5}
+                        max={100}
+                        step={5}
+                        value={dailyCap}
+                        onChange={(e) => handleCapSliderChange(parseInt(e.target.value))}
+                        style={{ width: "100%", cursor: "pointer", accentColor: dailyCap <= 30 ? "#38bdf8" : "#f59e0b" }}
+                      />
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", color: "#64748b", marginTop: "4px" }}>
+                        <span>5/day (Ultra Safe)</span>
+                        <span style={{ color: "#38bdf8", fontWeight: 700 }}>30/day (Recommended Default)</span>
+                        <span style={{ color: "#f59e0b" }}>100/day (High Risk)</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* High Cap Modal */}
+                  <HighLimitWarningModal
+                    isOpen={showHighCapModal}
+                    limit={pendingCapValue}
+                    onConfirm={confirmHighDailyCap}
+                    onCancel={() => setShowHighCapModal(false)}
+                  />
+
+                  {/* Document Library (Cloudinary Resumes) */}
+                  <DocumentLibrary
+                    attachments={attachments}
+                    onUpload={handleUploadResume}
+                    onDelete={handleDeleteResume}
+                    uploading={uploadingResume}
+                  />
+
+                  {/* Google Apps Script Relay Card */}
+                  <div style={{ background: "#111827", padding: "24px", borderRadius: "12px", border: "1px solid #1f2937", marginBottom: "26px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
                       <h3 style={{ margin: 0, fontSize: "1.1rem" }}>Google Apps Script Web App Relay</h3>
                       <button

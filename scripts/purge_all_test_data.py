@@ -32,6 +32,7 @@ def purge_test_data(dry_run: bool = True):
 
     tables_to_clear = [
         "bootstrap_records",
+        "contact_replacements",
         "do_not_contact",
         "purpose_attachments",
         "attachments",

@@ -17,6 +17,7 @@ from packages.shared.schema import User
 from apps.api.diagnostics import run_egress_check
 from apps.api.routers import (
     admin,
+    ai_copilot,
     ai_keys,
     attachments,
     auth,
@@ -66,6 +67,7 @@ app.include_router(auth.router)
 app.include_router(profile.router)
 app.include_router(senders.router)
 app.include_router(ai_keys.router)
+app.include_router(ai_copilot.router)
 app.include_router(purposes.router)
 app.include_router(batches.router)
 app.include_router(contacts.router)
