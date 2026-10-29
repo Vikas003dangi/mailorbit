@@ -144,8 +144,25 @@ def evaluate_all_due_batches(
 ) -> Dict[str, Any]:
     """
     Evaluates all active users and enqueues due batches into the JobQueue.
+    Optimized: only evaluates users who actually have PENDING batches.
     """
-    users = session.query(User).filter(User.is_active == True).all()
+    # 1. Quick check: are there any PENDING batches in the entire database?
+    has_pending = session.query(Batch.id).filter(Batch.status == "PENDING").first()
+    if not has_pending:
+        return {"evaluated_users": 0, "batches_queued": 0}
+
+    # 2. Only fetch users who have pending batches
+    user_ids = [
+        row[0]
+        for row in session.query(Batch.user_id)
+        .filter(Batch.status == "PENDING")
+        .distinct()
+        .all()
+    ]
+    if not user_ids:
+        return {"evaluated_users": 0, "batches_queued": 0}
+
+    users = session.query(User).filter(User.id.in_(user_ids), User.is_active == True).all()
     total_queued = 0
     total_evaluated_users = len(users)
 

@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from apps.api.dependencies import get_current_user, get_db
 from apps.api.services.batch_generator import auto_generate_batches
+from apps.api.services.schedule_cache import schedule_cache
 from packages.shared.schema import Batch, Contact, User
 
 router = APIRouter(prefix="/api/v1/batches", tags=["Batches & Scheduling"])
@@ -106,6 +107,7 @@ def update_batch(
 
     db.commit()
     db.refresh(batch)
+    schedule_cache.refresh_from_db(db)
     return batch
 
 
@@ -127,6 +129,7 @@ def auto_generate(
         daily_send_time=payload.daily_send_time,
         active_days=payload.active_days,
     )
+    schedule_cache.refresh_from_db(db)
     return AutoGenerateResponse(
         created_batches_count=len(batches),
         contacts_assigned_count=assigned,
@@ -152,6 +155,7 @@ def delete_batch(
     db.query(Contact).filter(Contact.batch_id == batch.id).update({"batch_id": None})
     db.delete(batch)
     db.commit()
+    schedule_cache.refresh_from_db(db)
     return None
 
 
@@ -176,5 +180,6 @@ def dispatch_single_batch(
     from apps.worker.dispatcher import dispatch_batch
 
     result = dispatch_batch(session=db, batch_id=batch.id)
+    schedule_cache.refresh_from_db(db)
     return result
 

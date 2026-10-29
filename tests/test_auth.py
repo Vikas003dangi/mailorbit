@@ -68,3 +68,53 @@ def test_signup_login_lifecycle():
     )
     assert refresh_res.status_code == 200
     assert "access_token" in refresh_res.json()
+
+    # 8. Server-side logout clears cookie
+    logout_res = client.post("/api/v1/auth/logout")
+    assert logout_res.status_code == 200
+    assert logout_res.json()["status"] == "success"
+
+
+def test_forgot_password_and_reset_flow():
+    email = f"reset_{uuid.uuid4().hex[:8]}@example.com"
+    pwd = "OriginalPassword123!"
+
+    # 1. Sign up user
+    client.post("/api/v1/auth/signup", json={"email": email, "password": pwd})
+
+    # 2. Forgot password request (non-existent email gives identical message)
+    non_existent = client.post("/api/v1/auth/forgot-password", json={"email": "nobody_exists_here_xyz@example.com"})
+    assert non_existent.status_code == 200
+    msg_non_existent = non_existent.json()["message"]
+
+    real_req = client.post("/api/v1/auth/forgot-password", json={"email": email})
+    assert real_req.status_code == 200
+    assert real_req.json()["message"] == msg_non_existent
+
+    # 3. Retrieve hashed token from DB for unit verification
+    from packages.shared.db import create_db_engine, create_session_factory
+    from packages.shared.schema import User
+    from apps.api.config import settings
+    engine = create_db_engine(settings.DATABASE_URL)
+    factory = create_session_factory(engine)
+    with factory() as session:
+        user = session.query(User).filter(User.email == email).first()
+        assert user.reset_token_hash is not None
+        # Set a known raw token hash for testing reset
+        import hashlib
+        known_raw = "test_reset_token_12345"
+        user.reset_token_hash = hashlib.sha256(known_raw.encode()).hexdigest()
+        session.commit()
+
+    # 4. Bad token fails
+    bad_reset = client.post("/api/v1/auth/reset-password", json={"token": "invalid_token", "new_password": "NewPassword123!"})
+    assert bad_reset.status_code == 400
+
+    # 5. Good token succeeds
+    good_reset = client.post("/api/v1/auth/reset-password", json={"token": known_raw, "new_password": "NewPassword123!"})
+    assert good_reset.status_code == 200
+    assert good_reset.json()["status"] == "success"
+
+    # 6. Verify login with new password
+    new_login = client.post("/api/v1/auth/login", json={"email": email, "password": "NewPassword123!"})
+    assert new_login.status_code == 200

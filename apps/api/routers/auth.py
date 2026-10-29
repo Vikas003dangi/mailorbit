@@ -1,12 +1,16 @@
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+import hashlib
+import secrets
 from typing import Optional
 import uuid
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from sqlalchemy.orm import Session
 
 from apps.api.config import settings
-from apps.api.dependencies import SUPERUSER_EMAILS, get_current_user, get_db
+from apps.api.dependencies import get_admin_emails, get_current_user, get_db
+from apps.api.services.rate_limiter import rate_limiter
+from apps.api.services.system_mailer import send_password_reset_email, send_verification_email
 from packages.shared.auth import (
     create_access_token,
     create_refresh_token,
@@ -25,16 +29,21 @@ class UserOut(BaseModel):
     timezone: str
     created_at: datetime
     is_superuser: bool = False
+    is_email_verified: bool = False
     model_config = ConfigDict(from_attributes=True)
 
 
 def to_user_out(user: User) -> UserOut:
+    admin_set = get_admin_emails()
+    is_verified = getattr(user, "is_email_verified", False)
+    is_super = (user.email.lower() in admin_set) and is_verified
     return UserOut(
         id=user.id,
         email=user.email,
         timezone=user.timezone,
         created_at=user.created_at,
-        is_superuser=user.email.lower() in SUPERUSER_EMAILS,
+        is_superuser=is_super,
+        is_email_verified=is_verified,
     )
 
 
@@ -60,6 +69,15 @@ class RefreshRequest(BaseModel):
     refresh_token: Optional[str] = None
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str = Field(..., min_length=8, description="Minimum 8 characters")
+
+
 def set_refresh_cookie(response: Response, refresh_token: str) -> None:
     """Sets secure, HTTP-only, same-site refresh cookie."""
     response.set_cookie(
@@ -74,8 +92,10 @@ def set_refresh_cookie(response: Response, refresh_token: str) -> None:
 
 
 @router.post("/signup", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
-def signup(payload: SignupRequest, response: Response, db: Session = Depends(get_db)):
-    """Registers a new user workspace, initializes an empty profile, and returns auth tokens."""
+def signup(request: Request, payload: SignupRequest, response: Response, db: Session = Depends(get_db)):
+    """Registers a new user workspace, creates verification token, and returns auth tokens."""
+    rate_limiter.check(request, "signup", max_requests=5, window_seconds=3600)
+
     existing = db.query(User).filter(User.email == payload.email.lower()).first()
     if existing:
         raise HTTPException(
@@ -84,10 +104,17 @@ def signup(payload: SignupRequest, response: Response, db: Session = Depends(get
         )
 
     pwd_hash = hash_password(payload.password)
+    raw_token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+    now = datetime.now(timezone.utc)
+
     user = User(
         email=payload.email.lower(),
         password_hash=pwd_hash,
         timezone=payload.timezone,
+        is_email_verified=False,
+        verification_token_hash=token_hash,
+        verification_sent_at=now,
     )
     db.add(user)
     db.flush()
@@ -97,6 +124,10 @@ def signup(payload: SignupRequest, response: Response, db: Session = Depends(get
     db.add(profile)
     db.commit()
     db.refresh(user)
+
+    # Dispatch verification email via platform transactional mailer
+    base_url = str(request.base_url).rstrip("/")
+    send_verification_email(to_email=user.email, token=raw_token, base_url=base_url)
 
     access_token = create_access_token(str(user.id), user.email, settings.TICK_SECRET)
     refresh_token = create_refresh_token(str(user.id), settings.TICK_SECRET)
@@ -110,8 +141,10 @@ def signup(payload: SignupRequest, response: Response, db: Session = Depends(get
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(payload: LoginRequest, response: Response, db: Session = Depends(get_db)):
-    """Authenticates user credentials and issues new access and refresh tokens."""
+def login(request: Request, payload: LoginRequest, response: Response, db: Session = Depends(get_db)):
+    """Authenticates user credentials and issues new access and refresh tokens with rate limiting."""
+    rate_limiter.check(request, "login", max_requests=5, window_seconds=60)
+
     user = db.query(User).filter(User.email == payload.email.lower(), User.is_active == True).first()
     if not user:
         raise HTTPException(
@@ -135,6 +168,91 @@ def login(payload: LoginRequest, response: Response, db: Session = Depends(get_d
     )
 
 
+@router.get("/verify-email")
+def verify_email(token: str = Query(..., description="Single-use verification token"), db: Session = Depends(get_db)):
+    """Verifies a user's email address using a single-use token."""
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    user = db.query(User).filter(User.verification_token_hash == token_hash).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired verification token")
+
+    user.is_email_verified = True
+    user.verification_token_hash = None
+    db.commit()
+
+    return {
+        "status": "success",
+        "message": "Email verified successfully! You may now access full workspace features.",
+        "email": user.email,
+    }
+
+
+@router.post("/forgot-password")
+def forgot_password(request: Request, payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    """
+    Dispatches a single-use password reset token via platform transactional mailer.
+    Response is strictly identical whether the email exists or not to prevent user enumeration.
+    """
+    user = db.query(User).filter(User.email == payload.email.lower(), User.is_active == True).first()
+    if user:
+        raw_token = secrets.token_urlsafe(32)
+        user.reset_token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+        user.reset_token_expires_at = datetime.now(timezone.utc) + timedelta(minutes=30)
+        db.commit()
+
+        base_url = str(request.base_url).rstrip("/")
+        send_password_reset_email(to_email=user.email, token=raw_token, base_url=base_url)
+
+    return {
+        "status": "success",
+        "message": "If an account exists with that email address, a password reset link has been dispatched. Please check your inbox.",
+    }
+
+
+@router.post("/reset-password")
+def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db)):
+    """Resets password using single-use hashed token valid for 30 minutes."""
+    token_hash = hashlib.sha256(payload.token.encode()).hexdigest()
+    now = datetime.now(timezone.utc)
+
+    user = db.query(User).filter(
+        User.reset_token_hash == token_hash,
+        User.reset_token_expires_at > now,
+    ).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired password reset token",
+        )
+
+    user.password_hash = hash_password(payload.new_password)
+    user.reset_token_hash = None
+    user.reset_token_expires_at = None
+    db.commit()
+
+    return {
+        "status": "success",
+        "message": "Password has been reset successfully. You may now log in with your new password.",
+    }
+
+
+@router.post("/logout")
+def logout(response: Response):
+    """Server-side logout clearing the same-site HttpOnly refresh cookie."""
+    response.delete_cookie(
+        key="mailorbit_refresh",
+        path="/api/v1/auth",
+        httponly=True,
+        samesite="lax",
+        secure=True,
+    )
+    return {
+        "status": "success",
+        "message": "Logged out successfully",
+    }
+
+
 @router.post("/refresh", response_model=TokenResponse)
 def refresh_token(
     response: Response,
@@ -142,7 +260,7 @@ def refresh_token(
     cookie_refresh: Optional[str] = Cookie(None, alias="mailorbit_refresh"),
     db: Session = Depends(get_db),
 ):
-    """Exchanges a valid refresh token (from JSON body or same-site HTTP-only cookie) for a fresh access token."""
+    """Exchanges a valid refresh token for a fresh access token."""
     token_str = (payload.refresh_token if payload and payload.refresh_token else None) or cookie_refresh
     if not token_str:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token required")

@@ -5,11 +5,12 @@ from typing import List, Optional
 import urllib.error
 import urllib.request
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from apps.api.dependencies import get_current_user, get_db, get_encryption_service
+from apps.api.services.rate_limiter import rate_limiter
 from packages.shared.crypto import EncryptionService
 from packages.shared.schema import AIKey, User
 
@@ -113,6 +114,7 @@ def list_ai_keys(
 @router.post("/{key_id}/test", response_model=KeyTestResult)
 def test_ai_key(
     key_id: uuid.UUID,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
     crypto: EncryptionService = Depends(get_encryption_service),
@@ -120,7 +122,9 @@ def test_ai_key(
     """
     Tests a Gemini API key against Google's API.
     Decrypts the key strictly in memory for the HTTP request, never logs it.
+    Rate limited to 10 requests per minute per IP.
     """
+    rate_limiter.check(request, "ai_key_test", max_requests=10, window_seconds=60)
     key_record = db.query(AIKey).filter(
         AIKey.id == key_id,
         AIKey.user_id == current_user.id,

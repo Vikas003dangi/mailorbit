@@ -30,6 +30,11 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     timezone = Column(String(50), default="UTC", nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
+    is_email_verified = Column(Boolean, default=False, nullable=False)
+    verification_token_hash = Column(String(255), nullable=True)
+    verification_sent_at = Column(DateTime(timezone=True), nullable=True)
+    reset_token_hash = Column(String(255), nullable=True)
+    reset_token_expires_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
 

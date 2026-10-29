@@ -2,11 +2,12 @@ from datetime import datetime
 from typing import List, Optional
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Request, status, UploadFile, File
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from apps.api.dependencies import get_current_user, get_db
+from apps.api.services.rate_limiter import rate_limiter
 from packages.shared.schema import User, Attachment, Purpose, purpose_attachments
 from packages.shared.cloudinary import upload_attachment, delete_attachment, validate_attachment, MAX_FILE_SIZE_BYTES
 
@@ -33,6 +34,7 @@ class PurposeAttachmentLinkResponse(BaseModel):
 
 @router.post("/attachments/upload", response_model=AttachmentResponse, status_code=status.HTTP_201_CREATED)
 async def upload_document(
+    request: Request,
     file: UploadFile = File(...),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -40,7 +42,9 @@ async def upload_document(
     """
     Upload a resume, portfolio, or proposal document to Cloudinary authenticated storage.
     Enforces 5 MB size limit and accepted document/image formats.
+    Rate limited to 10 requests per minute per IP.
     """
+    rate_limiter.check(request, "upload", max_requests=10, window_seconds=60)
     contents = await file.read()
     filename = file.filename or "attachment.pdf"
     content_type = file.content_type or "application/pdf"

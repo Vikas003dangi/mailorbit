@@ -20,6 +20,10 @@ class Settings(BaseSettings):
         "https://vikas003dangi.github.io",
     ]
 
+    ADMIN_EMAILS: str = "vikassdangi@gmail.com,vd19055@gmail.com"
+    BREVO_API_KEY: str | None = None
+    BREVO_SENDER_EMAIL: str = "noreply@mailorbit.io"
+
     CLOUDINARY_CLOUD_NAME: str | None = None
     CLOUDINARY_API_KEY: str | None = None
     CLOUDINARY_API_SECRET: str | None = None

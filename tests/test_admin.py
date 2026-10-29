@@ -4,9 +4,20 @@ from fastapi.testclient import TestClient
 
 from apps.api.main import app
 from apps.api.config import settings
-from packages.shared.auth import create_access_token
+from packages.shared.db import create_db_engine, create_session_factory
+from packages.shared.schema import User
 
 client = TestClient(app)
+
+
+def mark_user_verified(email: str):
+    engine = create_db_engine(settings.DATABASE_URL)
+    factory = create_session_factory(engine)
+    with factory() as session:
+        user = session.query(User).filter(User.email == email).first()
+        if user:
+            user.is_email_verified = True
+            session.commit()
 
 
 def test_admin_forbidden_for_regular_user():
@@ -25,10 +36,11 @@ def test_admin_forbidden_for_regular_user():
 def test_admin_allowed_for_superuser(monkeypatch):
     test_super_email = f"superuser_{uuid.uuid4().hex[:6]}@example.com"
     import apps.api.dependencies
-    monkeypatch.setattr(apps.api.dependencies, "SUPERUSER_EMAILS", {test_super_email})
+    monkeypatch.setattr(apps.api.dependencies, "get_admin_emails", lambda: {test_super_email})
 
     reg = client.post("/api/v1/auth/signup", json={"email": test_super_email, "password": "SuperSecure123!"})
     assert reg.status_code == 201
+    mark_user_verified(test_super_email)
     token = reg.json()["access_token"]
 
     headers = {"Authorization": f"Bearer {token}"}
@@ -44,10 +56,11 @@ def test_admin_allowed_for_superuser(monkeypatch):
 def test_admin_system_health_endpoint(monkeypatch):
     test_super_email = f"superuser_health_{uuid.uuid4().hex[:6]}@example.com"
     import apps.api.dependencies
-    monkeypatch.setattr(apps.api.dependencies, "SUPERUSER_EMAILS", {test_super_email})
+    monkeypatch.setattr(apps.api.dependencies, "get_admin_emails", lambda: {test_super_email})
 
     reg = client.post("/api/v1/auth/signup", json={"email": test_super_email, "password": "SuperSecure123!"})
     assert reg.status_code == 201
+    mark_user_verified(test_super_email)
     token = reg.json()["access_token"]
 
     headers = {"Authorization": f"Bearer {token}"}
@@ -62,10 +75,11 @@ def test_admin_system_health_endpoint(monkeypatch):
 def test_admin_capabilities(monkeypatch):
     test_super_email = f"superuser_caps_{uuid.uuid4().hex[:6]}@example.com"
     import apps.api.dependencies
-    monkeypatch.setattr(apps.api.dependencies, "SUPERUSER_EMAILS", {test_super_email})
+    monkeypatch.setattr(apps.api.dependencies, "get_admin_emails", lambda: {test_super_email})
 
     reg = client.post("/api/v1/auth/signup", json={"email": test_super_email, "password": "SuperSecure123!"})
     assert reg.status_code == 201
+    mark_user_verified(test_super_email)
     token = reg.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 

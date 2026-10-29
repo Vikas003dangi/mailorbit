@@ -35,11 +35,17 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+import dns.resolver
+
+_DNS_MX_CACHE: Dict[str, Tuple[bool, Optional[str]]] = {}
+
+
 def verify_email_domain(email: str) -> Tuple[bool, Optional[str]]:
     """
     Pre-send email verification check:
     1. Validates syntactic email format.
     2. Validates domain syntax and rejects invalid/prohibited TLDs.
+    3. Performs real DNS MX (and fallback A) resolution to verify domain exists and accepts mail.
     """
     if not email or not EMAIL_REGEX.match(email):
         return False, "Invalid email address format"
@@ -53,6 +59,41 @@ def verify_email_domain(email: str) -> Tuple[bool, Optional[str]]:
 
     if "." not in domain or domain.endswith("."):
         return False, f"Domain missing valid top-level domain: {domain}"
+
+    if domain in _DNS_MX_CACHE:
+        return _DNS_MX_CACHE[domain]
+
+    # Real DNS MX / A lookup
+    try:
+        resolver = dns.resolver.Resolver()
+        resolver.lifetime = 3.0
+        try:
+            mx_records = resolver.resolve(domain, "MX")
+            if mx_records:
+                _DNS_MX_CACHE[domain] = (True, None)
+                return True, None
+        except (dns.resolver.NoAnswer, dns.resolver.NoNameservers):
+            # Fallback to A record per RFC 5321
+            try:
+                a_records = resolver.resolve(domain, "A")
+                if a_records:
+                    _DNS_MX_CACHE[domain] = (True, None)
+                    return True, None
+            except Exception:
+                res = (False, f"Domain has no valid MX or A records: {domain}")
+                _DNS_MX_CACHE[domain] = res
+                return res
+        except dns.resolver.NXDOMAIN:
+            res = (False, f"Domain does not exist (NXDOMAIN): {domain}")
+            _DNS_MX_CACHE[domain] = res
+            return res
+    except Exception as exc:
+        logger.warning("DNS lookup exception for %s: %s", domain, exc)
+        if "NXDOMAIN" in str(exc) or "does not exist" in str(exc):
+            res = (False, f"Domain does not exist: {domain}")
+            _DNS_MX_CACHE[domain] = res
+            return res
+        return True, None
 
     return True, None
 

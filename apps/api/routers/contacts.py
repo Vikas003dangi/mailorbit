@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 import uuid
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
 from pydantic import BaseModel, ConfigDict, EmailStr
 from sqlalchemy.orm import Session
 
@@ -12,6 +12,8 @@ from apps.api.services.contact_importer import (
     parse_csv_content,
     process_contact_import,
 )
+from apps.api.services.rate_limiter import rate_limiter
+from apps.api.services.schedule_cache import schedule_cache
 from packages.shared.schema import Contact, User
 
 router = APIRouter(prefix="/api/v1/contacts", tags=["Contacts & Leads"])
@@ -99,6 +101,7 @@ def import_contacts_json(
         )
         created_batches_count = len(batches)
         assigned_count = assigned
+        schedule_cache.refresh_from_db(db)
 
     return ImportResponse(
         summary=summary,
@@ -109,6 +112,7 @@ def import_contacts_json(
 
 @router.post("/import-csv", response_model=ImportResponse, status_code=status.HTTP_201_CREATED)
 async def import_contacts_csv(
+    request: Request,
     file: UploadFile = File(...),
     purpose_id: Optional[uuid.UUID] = Form(None),
     auto_batch: bool = Form(True),
@@ -118,6 +122,7 @@ async def import_contacts_csv(
     db: Session = Depends(get_db),
 ):
     """Imports contacts from an uploaded CSV file with automatic column header mapping."""
+    rate_limiter.check(request, "upload", max_requests=10, window_seconds=60)
     content_bytes = await file.read()
     try:
         csv_text = content_bytes.decode("utf-8")
@@ -146,6 +151,7 @@ async def import_contacts_csv(
         )
         created_batches_count = len(batches)
         assigned_count = assigned
+        schedule_cache.refresh_from_db(db)
 
     return ImportResponse(
         summary=summary,

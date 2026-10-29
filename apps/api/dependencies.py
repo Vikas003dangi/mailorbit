@@ -78,14 +78,23 @@ def get_current_user(
     return user
 
 
-SUPERUSER_EMAILS = {"vikassdangi@gmail.com", "vd19055@gmail.com"}
+def get_admin_emails() -> set[str]:
+    raw = getattr(settings, "ADMIN_EMAILS", "") or ""
+    return {e.strip().lower() for e in raw.split(",") if e.strip()}
+
 
 def require_superuser(current_user: User = Depends(get_current_user)) -> User:
-    """Dependency that ensures the authenticated user has superuser privileges."""
-    if current_user.email.lower() not in SUPERUSER_EMAILS:
+    """Dependency that ensures the authenticated user has admin privileges via ADMIN_EMAILS and verified email."""
+    admin_emails = get_admin_emails()
+    if not current_user.email or current_user.email.lower() not in admin_emails:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Superuser privilege required to access this resource",
+        )
+    if not getattr(current_user, "is_email_verified", False):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Verified email address required for administrative access",
         )
     return current_user
 

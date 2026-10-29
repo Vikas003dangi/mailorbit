@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 import logging
 import os
 from typing import Optional
@@ -10,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from apps.api.config import settings
 from apps.api.dependencies import get_current_user, get_db
+from apps.api.services.schedule_cache import schedule_cache
 from packages.shared.schema import User
 from apps.api.diagnostics import run_egress_check
 from apps.api.routers import (
@@ -30,10 +32,22 @@ from packages.shared.models import EgressReport, HealthResponse, TickResponse
 logging.basicConfig(level=getattr(logging, settings.LOG_LEVEL, logging.INFO))
 logger = logging.getLogger("mailorbit.api")
 
+@asynccontextmanager
+async def lifespan(app_instance: FastAPI):
+    # Prime in-memory schedule cache on startup
+    try:
+        with session_factory() as session:
+            schedule_cache.refresh_from_db(session)
+    except Exception as e:
+        logger.warning("Failed to prime schedule cache on startup: %s", e)
+    yield
+
+
 app = FastAPI(
     title="MailOrbit API",
     description="Backend API for MailOrbit cold-email outreach platform",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 # CORS Configuration for frontend (Static export on GitHub Pages or localhost)
@@ -168,19 +182,38 @@ def run_tick(
 ):
     """
     Protected tick endpoint called by cron-job.org / watchdog.
-    Triggers:
-    1. Scheduler evaluation: evaluates due scheduled batches across all users based on timezone, days, and send time.
-    2. Worker execution: claims queued jobs from PostgreSQL queue and dispatches them.
+    - If in-memory schedule cache confirms no batches are due and no jobs pending:
+      Answers 'standby' immediately with ZERO database queries (allows Neon compute to suspend).
+    - If batches or jobs are due:
+      Evaluates due batches, claims and executes jobs, then refreshes the schedule cache.
     """
+    # In-memory check for zero DB query standby
+    if schedule_cache.last_refreshed_at is not None and not schedule_cache.is_tick_due():
+        return TickResponse(
+            status="standby",
+            batches_queued=0,
+            jobs_claimed=0,
+            jobs_processed=0,
+            message="Tick status: standby (0 DB queries; in-memory schedule cache confirmed no batches due)",
+        )
+
     batches_queued = 0
     try:
         with session_factory() as session:
             sched_result = evaluate_all_due_batches(session=session, queue=queue)
             batches_queued = sched_result.get("batches_queued", 0)
+            schedule_cache.refresh_from_db(session)
     except Exception as e:
         logger.exception("Error during scheduler evaluation in tick: %s", e)
 
     processed = worker.tick(batch_size=batch_size)
+    if processed > 0:
+        try:
+            with session_factory() as session:
+                schedule_cache.refresh_from_db(session)
+        except Exception:
+            pass
+
     status_str = "standby" if (batches_queued == 0 and processed == 0) else "ok"
     return TickResponse(
         status=status_str,
