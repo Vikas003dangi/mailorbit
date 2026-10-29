@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from apps.api.config import settings
 from apps.api.dependencies import get_current_user, get_db
+from packages.shared.schema import User
 from apps.api.diagnostics import run_egress_check
 from apps.api.routers import (
     admin,
