@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from apps.api.config import settings
 from apps.api.dependencies import get_current_user, get_db
+from apps.api.services.rate_limiter import rate_limiter
 from apps.api.services.schedule_cache import schedule_cache
 from packages.shared.schema import User
 from apps.api.diagnostics import run_egress_check
@@ -165,7 +166,8 @@ def status_page(db: Session = Depends(get_db)):
     return HTMLResponse(content=html_content)
 
 
-@app.get("/api/v1/health", response_model=HealthResponse, tags=["System"])
+@app.api_route("/api/v1/health", methods=["GET", "HEAD"], response_model=HealthResponse, tags=["System"])
+@app.api_route("/health", methods=["GET", "HEAD"], response_model=HealthResponse, tags=["System"], include_in_schema=False)
 def get_health():
     """Unprotected health check endpoint for uptime pingers and Render."""
     return HealthResponse(
@@ -210,7 +212,7 @@ def debug_hops(request: Request, _=Security(verify_tick_secret)):
     }
 
 
-@app.api_route("/api/v1/tick", methods=["GET", "POST"], response_model=TickResponse, tags=["Watchdog"])
+@app.api_route("/api/v1/tick", methods=["GET", "POST", "HEAD"], response_model=TickResponse, tags=["Watchdog"])
 def run_tick(
     batch_size: int = Query(10, ge=1, le=100),
     _=Security(verify_tick_secret),

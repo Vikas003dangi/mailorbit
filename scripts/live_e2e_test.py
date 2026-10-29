@@ -11,6 +11,7 @@ Executes against: https://mailorbit-api-nrxf.onrender.com
 """
 
 import json
+import os
 import smtplib
 import sys
 import time

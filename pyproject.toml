@@ -3,7 +3,7 @@ name = "mailorbit"
 version = "0.1.0"
 description = "MailOrbit - AI Cold-Email Outreach Platform"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.12"
 dependencies = [
     "fastapi>=0.110.0",
     "uvicorn[standard]>=0.28.0",

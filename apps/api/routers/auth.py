@@ -18,7 +18,7 @@ from packages.shared.auth import (
     hash_password,
     verify_password,
 )
-from packages.shared.schema import Profile, User
+from packages.shared.schema import BootstrapRecord, Profile, User
 
 router = APIRouter(prefix="/api/v1/auth", tags=["Authentication"])
 
@@ -271,10 +271,11 @@ def refresh_token(
         if decoded.get("type") != "refresh":
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token type")
         user_id = decoded.get("sub")
+        user_uuid = uuid.UUID(str(user_id))
     except Exception:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired refresh token")
 
-    user = db.query(User).filter(User.id == user_id, User.is_active == True).first()
+    user = db.query(User).filter(User.id == user_uuid, User.is_active == True).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
 
@@ -301,6 +302,7 @@ class BootstrapAdminRequest(BaseModel):
 
 @router.post("/bootstrap-admin")
 def bootstrap_admin(
+    request: Request,
     payload: BootstrapAdminRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -308,8 +310,9 @@ def bootstrap_admin(
     """
     One-time bootstrap endpoint to safely elevate an account whose email is in ADMIN_EMAILS
     to verified status when system transactional email is offline.
-    Invalidates the bootstrap token immediately after successful first use.
+    Permanently records token consumption in the database so it can NEVER be reused across restarts.
     """
+    # 1. Caller Authorization Check (must be in ADMIN_EMAILS)
     admin_set = get_admin_emails()
     if not current_user.email or current_user.email.lower() not in admin_set:
         raise HTTPException(
@@ -317,6 +320,7 @@ def bootstrap_admin(
             detail="User email is not authorized for administrative bootstrap",
         )
 
+    # 2. Token Matching Check
     expected_token = getattr(settings, "ADMIN_BOOTSTRAP_TOKEN", None)
     if not expected_token or not secrets.compare_digest(payload.bootstrap_token.strip(), expected_token.strip()):
         raise HTTPException(
@@ -324,17 +328,35 @@ def bootstrap_admin(
             detail="Invalid or expired admin bootstrap token",
         )
 
+    # 3. Permanent Database Consumption Check
+    token_hash = hashlib.sha256(payload.bootstrap_token.strip().encode()).hexdigest()
+    consumed = db.query(BootstrapRecord).filter(BootstrapRecord.token_hash == token_hash).first()
+    if consumed:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin bootstrap token has already been consumed and cannot be reused",
+        )
+
     # Elevate and verify user
     current_user.is_email_verified = True
     current_user.verification_token_hash = None
+
+    # Persist consumption record in database permanently
+    client_ip = request.client.host if request.client else None
+    record = BootstrapRecord(
+        token_hash=token_hash,
+        user_id=current_user.id,
+        ip_address=client_ip,
+    )
+    db.add(record)
     db.commit()
 
-    # Invalidate token in memory immediately so it cannot be reused
+    # Invalidate token in memory immediately
     settings.ADMIN_BOOTSTRAP_TOKEN = None
 
     return {
         "status": "success",
-        "message": f"User {current_user.email} successfully verified and elevated to administrator. One-time bootstrap token expired.",
+        "message": f"User {current_user.email} successfully verified and elevated to administrator. Token permanently consumed in database.",
         "user": to_user_out(current_user),
     }
 

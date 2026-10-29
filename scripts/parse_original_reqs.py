@@ -33,3 +33,4 @@ if current_id:
 print(f"Total extracted requirement IDs: {len(reqs)}")
 for r in reqs:
     print(f"{r[0]}: {r[1][:80]}")
+

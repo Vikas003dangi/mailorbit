@@ -9,3 +9,4 @@ with open(r'C:\Users\vikas\.gemini\antigravity\brain\8bd5c406-decd-4db5-8f71-45e
                 out.write(content)
             print('Extracted full prompt, length:', len(content))
             break
+

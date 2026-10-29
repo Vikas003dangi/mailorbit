@@ -188,8 +188,14 @@ def test_m10_full_pipeline_end_to_end_hardening():
 
     test_pacer = Pacer(min_seconds=0.0, max_seconds=0.0)
 
+    def mock_dns_verify(email: str):
+        if "nodomain.com" in email:
+            return False, "Prohibited or unreachable domain: nodomain.com"
+        return True, None
+
     # 9. Dispatch Batch 1
-    with patch("httpx.Client.post", return_value=mock_gemini_resp):
+    with patch("httpx.Client.post", return_value=mock_gemini_resp), \
+         patch("apps.worker.dispatcher.verify_email_domain", side_effect=mock_dns_verify):
         with session_factory() as session:
             dispatch_result = dispatch_batch(
                 session=session,

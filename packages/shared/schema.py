@@ -2,21 +2,71 @@ from datetime import datetime, timezone
 import uuid
 from sqlalchemy import (
     Boolean,
+    CHAR,
     Column,
     Date,
     DateTime,
     ForeignKey,
     Index,
     Integer,
+    JSON,
     String,
     Table,
     Text,
+    TypeDecorator,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 
 from packages.shared.db import Base
+
+
+class SafeUUID(TypeDecorator):
+    """Platform-independent UUID. Native PostgreSQL UUID in prod; CHAR(36) in SQLite."""
+    impl = CHAR(36)
+    cache_ok = True
+
+    def __init__(self, as_uuid: bool = True):
+        super().__init__()
+        self.as_uuid = as_uuid
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == "postgresql":
+            from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+            return dialect.type_descriptor(PG_UUID(as_uuid=True))
+        return dialect.type_descriptor(CHAR(36))
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        return str(value)
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return None
+        if isinstance(value, uuid.UUID):
+            return value
+        try:
+            return uuid.UUID(str(value))
+        except ValueError:
+            return value
+
+
+class SafeJSON(TypeDecorator):
+    """Platform-independent JSON. Native JSONB in PostgreSQL; standard JSON in SQLite."""
+    impl = JSON
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == "postgresql":
+            from sqlalchemy.dialects.postgresql import JSONB as PG_JSONB
+            return dialect.type_descriptor(PG_JSONB)
+        return dialect.type_descriptor(JSON)
+
+
+# Backward-compatible drop-in aliases
+UUID = SafeUUID
+JSONB = SafeJSON
 
 
 def utc_now() -> datetime:
@@ -251,3 +301,14 @@ class JobModel(Base):
     last_error = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
+
+
+class BootstrapRecord(Base):
+    __tablename__ = "bootstrap_records"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    token_hash = Column(String(64), nullable=False, unique=True, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    consumed_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    ip_address = Column(String(45), nullable=True)
+

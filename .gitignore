@@ -14,9 +14,12 @@ __pycache__/
 *$py.class
 *.so
 .Python
+*.db
+*.sqlite
 env/
 venv/
 .venv/
+.venv*/
 ENV/
 build/
 develop-eggs/

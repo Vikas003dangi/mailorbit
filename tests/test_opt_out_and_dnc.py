@@ -1,5 +1,5 @@
 from datetime import datetime
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 import uuid
 import pytest
 from fastapi.testclient import TestClient
@@ -200,13 +200,14 @@ def test_pre_send_dnc_check_blocks_email_and_auto_topup_replaces():
     mock_sender.send_email.return_value = {"status": "SENT"}
     test_pacer = Pacer(min_seconds=0.0, max_seconds=0.0)
 
-    with session_factory() as session:
-        result = dispatch_batch(
-            session=session,
-            batch_id=batch_id,
-            sender=mock_sender,
-            pacer=test_pacer,
-        )
+    with patch("apps.worker.dispatcher.verify_email_domain", return_value=(True, None)):
+        with session_factory() as session:
+            result = dispatch_batch(
+                session=session,
+                batch_id=batch_id,
+                sender=mock_sender,
+                pacer=test_pacer,
+            )
 
     # 1 replaced, 1 sent!
     assert result["replaced_count"] == 1

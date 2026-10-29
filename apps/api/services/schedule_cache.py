@@ -9,6 +9,7 @@ This allows Neon Serverless PostgreSQL to remain suspended during idle periods.
 from datetime import datetime, time, timedelta, timezone
 import logging
 from typing import Optional
+import uuid
 from zoneinfo import ZoneInfo
 from sqlalchemy.orm import Session
 

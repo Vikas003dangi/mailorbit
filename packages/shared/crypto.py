@@ -19,7 +19,12 @@ class EnvKeyManager:
     def __init__(self, key_b64: str):
         if not key_b64:
             raise ValueError("ENCRYPTION_MASTER_KEY must not be empty")
-        raw = base64.b64decode(key_b64)
+        clean_key = key_b64.strip()
+        padded = clean_key + "=" * (-len(clean_key) % 4)
+        try:
+            raw = base64.urlsafe_b64decode(padded.encode())
+        except Exception:
+            raw = base64.b64decode(padded.encode())
         if len(raw) != 32:
             raise ValueError(f"Master key must be exactly 32 bytes (AES-256), got {len(raw)} bytes")
         self._key = raw

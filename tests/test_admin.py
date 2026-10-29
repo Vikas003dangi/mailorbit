@@ -114,7 +114,10 @@ def test_admin_bootstrap_token_lifecycle(monkeypatch):
         headers=admin_headers,
     )
     assert res_reuse.status_code == 403
-    assert "Invalid or expired" in res_reuse.json()["detail"]
+    assert (
+        "Invalid or expired" in res_reuse.json()["detail"]
+        or "already been consumed" in res_reuse.json()["detail"]
+    )
 
     # 5. Admin now has full admin access
     stats_res = client.get("/api/v1/admin/stats", headers=admin_headers)

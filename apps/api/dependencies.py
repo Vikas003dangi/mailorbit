@@ -61,14 +61,24 @@ def get_current_user(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Token payload missing subject identifier",
             )
-    except Exception as e:
+        import uuid
+        try:
+            user_uuid = uuid.UUID(str(user_id))
+        except Exception:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid user identifier format",
+            )
+    except HTTPException:
+        raise
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired access token",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    user = db.query(User).filter(User.id == user_id, User.is_active == True).first()
+    user = db.query(User).filter(User.id == user_uuid, User.is_active == True).first()
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

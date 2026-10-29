@@ -33,3 +33,4 @@ new_text = text[:idx] + appendix.strip() + "\n"
 with open('B:/mailorbit/docs/M2_CAMPAIGN_ENGINE_DESIGN.md', 'w', encoding='utf-8') as f:
     f.write(new_text)
 print('Successfully updated M2 design document.')
+
