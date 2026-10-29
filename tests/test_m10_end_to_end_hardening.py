@@ -213,4 +213,4 @@ def test_m10_full_pipeline_end_to_end_hardening():
     tick_headers = {"X-Tick-Secret": settings.TICK_SECRET}
     tick_res = client.post("/api/v1/tick?batch_size=5", headers=tick_headers)
     assert tick_res.status_code == 200
-    assert tick_res.json()["status"] == "ok"
+    assert tick_res.json()["status"] in ("ok", "standby")

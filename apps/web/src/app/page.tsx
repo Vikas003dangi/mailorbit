@@ -39,7 +39,7 @@ import {
   Info,
 } from "lucide-react";
 
-const DEFAULT_API_URL = "https://mailorbit-api-nrxf.onrender.com";
+const DEFAULT_API_URL = "";
 
 // Superuser accounts with full administrative control deck access
 const SUPERUSER_EMAILS = ["vikassdangi@gmail.com", "vd19055@gmail.com"];
@@ -265,10 +265,10 @@ export default function MailOrbitDashboard() {
   // Initialize from localStorage and check wake-up health
   useEffect(() => {
     const savedToken = localStorage.getItem("mailorbit_token");
-    const savedApi = localStorage.getItem("mailorbit_api_url") || DEFAULT_API_URL;
+    const savedApi = "";
     const savedDemo = localStorage.getItem("mailorbit_demo") === "true";
 
-    setApiUrl(savedApi);
+    setApiUrl("");
 
     if (savedDemo) {
       enableDemoMode();
@@ -802,32 +802,33 @@ export default function MailOrbitDashboard() {
       >
         <div style={{ display: "flex", alignItems: "center", gap: "24px" }}>
           <OrbitalLogo size={38} />
-          {/* Quick status pill */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "6px",
-              padding: "4px 10px",
-              borderRadius: "20px",
-              background: isDemoMode ? "rgba(245, 158, 11, 0.12)" : apiHealthy ? "rgba(34, 197, 94, 0.12)" : "rgba(56, 189, 248, 0.1)",
-              border: `1px solid ${isDemoMode ? "#f59e0b" : apiHealthy ? "#22c55e" : "#38bdf8"}`,
-              fontSize: "0.75rem",
-              fontWeight: 600,
-              color: isDemoMode ? "#fbbf24" : apiHealthy ? "#4ade80" : "#38bdf8",
-            }}
-          >
-            <span
+          {isDemoMode && (
+            <div
               style={{
-                width: "7px",
-                height: "7px",
-                borderRadius: "50%",
-                background: isDemoMode ? "#f59e0b" : apiHealthy ? "#22c55e" : "#38bdf8",
-                boxShadow: isDemoMode ? "0 0 8px #f59e0b" : apiHealthy ? "0 0 8px #22c55e" : "0 0 8px #38bdf8",
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                padding: "4px 10px",
+                borderRadius: "20px",
+                background: "rgba(245, 158, 11, 0.12)",
+                border: "1px solid #f59e0b",
+                fontSize: "0.75rem",
+                fontWeight: 600,
+                color: "#fbbf24",
               }}
-            />
-            {isDemoMode ? "Interactive Sandbox / Demo" : apiHealthy ? "Cloud System Online" : "Connecting..."}
-          </div>
+            >
+              <span
+                style={{
+                  width: "7px",
+                  height: "7px",
+                  borderRadius: "50%",
+                  background: "#f59e0b",
+                  boxShadow: "0 0 8px #f59e0b",
+                }}
+              />
+              Interactive Sandbox / Demo
+            </div>
+          )}
         </div>
 
         {/* Right Header Navigation & User Actions */}
@@ -1160,6 +1161,12 @@ export default function MailOrbitDashboard() {
               </a>
               <a href="https://linkedin.com/in/vikas-dangi-dev" target="_blank" rel="noreferrer" style={{ color: "#94a3b8" }}>
                 <Linkedin size={14} />
+              </a>
+            </div>
+            <div style={{ marginTop: "10px", paddingTop: "8px", borderTop: "1px solid #1e293b" }}>
+              <a href="/status" target="_blank" rel="noreferrer" style={{ fontSize: "0.72rem", color: "#64748b", textDecoration: "none", display: "flex", alignItems: "center", gap: "4px" }}>
+                <span>System Status</span>
+                <ExternalLink size={10} />
               </a>
             </div>
           </div>

@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from sqlalchemy.orm import Session
 
@@ -57,11 +57,24 @@ class LoginRequest(BaseModel):
 
 
 class RefreshRequest(BaseModel):
-    refresh_token: str
+    refresh_token: Optional[str] = None
+
+
+def set_refresh_cookie(response: Response, refresh_token: str) -> None:
+    """Sets secure, HTTP-only, same-site refresh cookie."""
+    response.set_cookie(
+        key="mailorbit_refresh",
+        value=refresh_token,
+        httponly=True,
+        samesite="lax",
+        secure=True,
+        max_age=7 * 24 * 3600,
+        path="/api/v1/auth",
+    )
 
 
 @router.post("/signup", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
-def signup(payload: SignupRequest, db: Session = Depends(get_db)):
+def signup(payload: SignupRequest, response: Response, db: Session = Depends(get_db)):
     """Registers a new user workspace, initializes an empty profile, and returns auth tokens."""
     existing = db.query(User).filter(User.email == payload.email.lower()).first()
     if existing:
@@ -87,6 +100,7 @@ def signup(payload: SignupRequest, db: Session = Depends(get_db)):
 
     access_token = create_access_token(str(user.id), user.email, settings.TICK_SECRET)
     refresh_token = create_refresh_token(str(user.id), settings.TICK_SECRET)
+    set_refresh_cookie(response, refresh_token)
 
     return TokenResponse(
         access_token=access_token,
@@ -96,7 +110,7 @@ def signup(payload: SignupRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(payload: LoginRequest, db: Session = Depends(get_db)):
+def login(payload: LoginRequest, response: Response, db: Session = Depends(get_db)):
     """Authenticates user credentials and issues new access and refresh tokens."""
     user = db.query(User).filter(User.email == payload.email.lower(), User.is_active == True).first()
     if not user:
@@ -112,6 +126,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
 
     access_token = create_access_token(str(user.id), user.email, settings.TICK_SECRET)
     refresh_token = create_refresh_token(str(user.id), settings.TICK_SECRET)
+    set_refresh_cookie(response, refresh_token)
 
     return TokenResponse(
         access_token=access_token,
@@ -121,10 +136,19 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/refresh", response_model=TokenResponse)
-def refresh_token(payload: RefreshRequest, db: Session = Depends(get_db)):
-    """Exchanges a valid refresh token for a fresh access token."""
+def refresh_token(
+    response: Response,
+    payload: Optional[RefreshRequest] = None,
+    cookie_refresh: Optional[str] = Cookie(None, alias="mailorbit_refresh"),
+    db: Session = Depends(get_db),
+):
+    """Exchanges a valid refresh token (from JSON body or same-site HTTP-only cookie) for a fresh access token."""
+    token_str = (payload.refresh_token if payload and payload.refresh_token else None) or cookie_refresh
+    if not token_str:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token required")
+
     try:
-        decoded = decode_token(payload.refresh_token, settings.TICK_SECRET)
+        decoded = decode_token(token_str, settings.TICK_SECRET)
         if decoded.get("type") != "refresh":
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token type")
         user_id = decoded.get("sub")
@@ -137,6 +161,7 @@ def refresh_token(payload: RefreshRequest, db: Session = Depends(get_db)):
 
     new_access = create_access_token(str(user.id), user.email, settings.TICK_SECRET)
     new_refresh = create_refresh_token(str(user.id), settings.TICK_SECRET)
+    set_refresh_cookie(response, new_refresh)
 
     return TokenResponse(
         access_token=new_access,

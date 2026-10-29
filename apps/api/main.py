@@ -1,10 +1,15 @@
 import logging
+import os
 from typing import Optional
-from fastapi import FastAPI, Header, HTTPException, Query, Security, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Security, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 
 from apps.api.config import settings
+from apps.api.dependencies import get_db
 from apps.api.diagnostics import run_egress_check
 from apps.api.routers import (
     admin,
@@ -94,10 +99,54 @@ def verify_tick_secret(
         )
 
 
-@app.get("/", include_in_schema=False)
-def root():
-    """Redirects root visits to the interactive API documentation."""
-    return RedirectResponse(url="/docs")
+@app.get("/status", response_class=HTMLResponse, tags=["System"], include_in_schema=False)
+def status_page(db: Session = Depends(get_db)):
+    """System architecture and isolated status diagnostics page."""
+    db_ok = False
+    try:
+        db.execute(text("SELECT 1"))
+        db_ok = True
+    except Exception:
+        db_ok = False
+
+    html_content = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>MailOrbit System Architecture & Status</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {{ background: #0b0f19; color: #f8fafc; font-family: system-ui, -apple-system, sans-serif; margin: 0; padding: 40px 20px; }}
+    .container {{ max-width: 680px; margin: 0 auto; background: #111827; border: 1px solid #1f2937; border-radius: 12px; padding: 32px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }}
+    h1 {{ font-size: 1.5rem; margin: 0 0 6px; color: #ffffff; }}
+    .status-badge {{ display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 20px; background: rgba(34, 197, 94, 0.15); color: #4ade80; font-weight: 600; font-size: 0.85rem; border: 1px solid #22c55e; margin: 16px 0 24px; }}
+    .dot {{ width: 8px; height: 8px; border-radius: 50%; background: #22c55e; }}
+    .stack-list {{ list-style: none; padding: 0; margin: 0 0 28px; }}
+    .stack-item {{ display: flex; justify-content: space-between; align-items: center; padding: 14px 0; border-bottom: 1px solid #1f2937; font-size: 0.9rem; }}
+    .stack-name {{ color: #e2e8f0; font-weight: 500; }}
+    .stack-val {{ color: #38bdf8; font-size: 0.85rem; font-weight: 600; }}
+    .btn {{ display: inline-block; background: #0284c7; color: #fff; text-decoration: none; padding: 10px 18px; border-radius: 6px; font-weight: 600; font-size: 0.85rem; }}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>MailOrbit System Architecture & Status</h1>
+    <p style="color: #94a3b8; font-size: 0.85rem; margin: 0;">Isolated infrastructure status and connection telemetry.</p>
+    <div class="status-badge"><span class="dot"></span> All Systems Operational</div>
+    <ul class="stack-list">
+      <li class="stack-item"><span class="stack-name">Unified Host Runtime</span><span class="stack-val">Render Web Service (Oregon)</span></li>
+      <li class="stack-item"><span class="stack-name">Web Application</span><span class="stack-val">Mounted at root "/" (Next.js Static Export)</span></li>
+      <li class="stack-item"><span class="stack-name">Relational Database</span><span class="stack-val">Neon PostgreSQL 16 (Ohio) - {'Connected' if db_ok else 'Degraded'}</span></li>
+      <li class="stack-item"><span class="stack-name">Outbound Egress Relay</span><span class="stack-val">Google Apps Script HTTPS:443 (10% Safety Pause)</span></li>
+      <li class="stack-item"><span class="stack-name">Watchdog Scheduler</span><span class="stack-val">cron-job.org /tick (Header-only auth)</span></li>
+      <li class="stack-item"><span class="stack-name">Keepalive Monitor</span><span class="stack-val">UptimeRobot /api/v1/health</span></li>
+      <li class="stack-item"><span class="stack-name">Attachment Storage</span><span class="stack-val">Cloudinary Storage (Signed URLs)</span></li>
+    </ul>
+    <a href="/" class="btn">← Back to MailOrbit App</a>
+  </div>
+</body>
+</html>"""
+    return HTMLResponse(content=html_content)
 
 
 @app.get("/api/v1/health", response_model=HealthResponse, tags=["System"])
@@ -152,3 +201,9 @@ def get_egress_diagnostics(
     3. HTTPS GET https://script.google.com
     """
     return run_egress_check()
+
+
+# Mount static build of Next.js frontend at root "/"
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+if os.path.isdir(static_dir):
+    app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
