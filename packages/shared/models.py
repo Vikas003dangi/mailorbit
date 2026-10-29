@@ -10,6 +10,7 @@ class HealthResponse(BaseModel):
     app: str = "mailorbit-api"
     version: str = "0.1.0"
     environment: str = "development"
+    commit: str = "unknown"
     timestamp: datetime = Field(default_factory=utc_now)
 
 class DiagnosticItem(BaseModel):

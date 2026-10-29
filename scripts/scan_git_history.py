@@ -35,3 +35,4 @@ unique_findings = sorted(list(set(findings)))
 print(f"Total secret occurrences found in git history: {len(unique_findings)}")
 for commit, filepath, stype in unique_findings:
     print(f"Commit {commit} | File: {filepath} | Type: {stype}")
+

@@ -18,3 +18,4 @@ with engine.connect() as conn:
         text("SELECT count(id) FROM contacts WHERE status IN ('SENT', 'DELIVERED')")
     ).scalar()
     print(f"VERIFICATION QUERY: Contacts marked SENT or DELIVERED in production DB = {check}")
+

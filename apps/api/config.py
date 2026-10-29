@@ -1,8 +1,28 @@
 import json
 import os
+import subprocess
 from typing import List
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def get_commit_hash() -> str:
+    commit = os.getenv("RENDER_GIT_COMMIT")
+    if commit:
+        return commit[:7]
+    try:
+        res = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+            cwd=os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+        )
+        if res.returncode == 0 and res.stdout.strip():
+            return res.stdout.strip()
+    except Exception:
+        pass
+    return "unknown"
 
 
 class Settings(BaseSettings):
@@ -21,6 +41,7 @@ class Settings(BaseSettings):
     ]
 
     ADMIN_EMAILS: str = "vikassdangi@gmail.com,vd19055@gmail.com"
+    ADMIN_BOOTSTRAP_TOKEN: str | None = None
     BREVO_API_KEY: str | None = None
     BREVO_SENDER_EMAIL: str = "noreply@mailorbit.io"
 
@@ -30,6 +51,7 @@ class Settings(BaseSettings):
 
     TRUSTED_PROXY_COUNT: int = 1
     IS_BEHIND_CLOUDFLARE: bool = False
+    COMMIT_HASH: str = Field(default_factory=get_commit_hash)
 
     model_config = SettingsConfigDict(
         env_file=(".env.local", ".env"),

@@ -52,6 +52,7 @@ class TokenResponse(BaseModel):
     refresh_token: str
     token_type: str = "bearer"
     user: UserOut
+    message: Optional[str] = None
 
 
 class SignupRequest(BaseModel):
@@ -127,7 +128,11 @@ def signup(request: Request, payload: SignupRequest, response: Response, db: Ses
 
     # Dispatch verification email via platform transactional mailer
     base_url = str(request.base_url).rstrip("/")
-    send_verification_email(to_email=user.email, token=raw_token, base_url=base_url)
+    mail_res = send_verification_email(to_email=user.email, token=raw_token, base_url=base_url)
+    if mail_res.get("status") == "UNAVAILABLE":
+        info_message = "Email verification is temporarily unavailable. Account registered in unverified mode with limited access."
+    else:
+        info_message = "Verification email dispatched. Please check your inbox to verify your account."
 
     access_token = create_access_token(str(user.id), user.email, settings.TICK_SECRET)
     refresh_token = create_refresh_token(str(user.id), settings.TICK_SECRET)
@@ -137,6 +142,7 @@ def signup(request: Request, payload: SignupRequest, response: Response, db: Ses
         access_token=access_token,
         refresh_token=refresh_token,
         user=to_user_out(user),
+        message=info_message,
     )
 
 
@@ -287,3 +293,48 @@ def refresh_token(
 def get_current_user_profile(current_user: User = Depends(get_current_user)):
     """Returns the authenticated user details."""
     return to_user_out(current_user)
+
+
+class BootstrapAdminRequest(BaseModel):
+    bootstrap_token: str = Field(..., description="One-time administrator bootstrap secret token")
+
+
+@router.post("/bootstrap-admin")
+def bootstrap_admin(
+    payload: BootstrapAdminRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    One-time bootstrap endpoint to safely elevate an account whose email is in ADMIN_EMAILS
+    to verified status when system transactional email is offline.
+    Invalidates the bootstrap token immediately after successful first use.
+    """
+    admin_set = get_admin_emails()
+    if not current_user.email or current_user.email.lower() not in admin_set:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User email is not authorized for administrative bootstrap",
+        )
+
+    expected_token = getattr(settings, "ADMIN_BOOTSTRAP_TOKEN", None)
+    if not expected_token or not secrets.compare_digest(payload.bootstrap_token.strip(), expected_token.strip()):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid or expired admin bootstrap token",
+        )
+
+    # Elevate and verify user
+    current_user.is_email_verified = True
+    current_user.verification_token_hash = None
+    db.commit()
+
+    # Invalidate token in memory immediately so it cannot be reused
+    settings.ADMIN_BOOTSTRAP_TOKEN = None
+
+    return {
+        "status": "success",
+        "message": f"User {current_user.email} successfully verified and elevated to administrator. One-time bootstrap token expired.",
+        "user": to_user_out(current_user),
+    }
+

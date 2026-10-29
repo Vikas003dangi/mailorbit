@@ -12,3 +12,4 @@ fi
 
 echo "[Security] Secret scan passed cleanly."
 exit 0
+

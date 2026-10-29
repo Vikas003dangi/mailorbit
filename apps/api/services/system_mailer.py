@@ -30,14 +30,14 @@ def send_system_email(
 
     if not api_key:
         logger.warning(
-            "BREVO_API_KEY not configured. Simulated system email to %s: %s",
+            "BREVO_API_KEY not configured. System transactional email to %s unavailable: %s",
             to_email,
             subject,
         )
         return {
-            "success": True,
-            "status": "SIMULATED",
-            "detail": "BREVO_API_KEY not configured; system email was logged in simulated mode.",
+            "success": False,
+            "status": "UNAVAILABLE",
+            "detail": "BREVO_API_KEY not configured; system transactional email service is unavailable.",
             "to": to_email,
         }
 
