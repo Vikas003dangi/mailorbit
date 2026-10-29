@@ -38,6 +38,7 @@ import {
   ChevronRight,
   Info,
 } from "lucide-react";
+import TutorialModal, { TutorialTab } from "./TutorialModal";
 
 const DEFAULT_API_URL = "";
 
@@ -215,6 +216,13 @@ export default function MailOrbitDashboard() {
   const [activeTab, setActiveTab] = useState<
     "overview" | "campaigns" | "contacts" | "ai" | "settings" | "about" | "admin"
   >("overview");
+
+  // Interactive Tutorial / Guide Modal State
+  const [tutorialModalTab, setTutorialModalTab] = useState<TutorialTab | null>(null);
+
+  const openTutorial = (tab: TutorialTab) => {
+    setTutorialModalTab(tab);
+  };
 
   // Auth form state
   const [authMode, setAuthMode] = useState<"login" | "signup">("login");
@@ -896,7 +904,28 @@ export default function MailOrbitDashboard() {
         </div>
 
         {/* Right Header Navigation & User Actions */}
-        <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <button
+            onClick={() => openTutorial("relay")}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              background: "rgba(56, 189, 248, 0.1)",
+              color: "#38bdf8",
+              border: "1px solid rgba(56, 189, 248, 0.3)",
+              padding: "6px 14px",
+              borderRadius: "6px",
+              fontSize: "0.82rem",
+              fontWeight: 600,
+              cursor: "pointer",
+              transition: "all 0.15s ease",
+            }}
+          >
+            <BookOpen size={14} color="#38bdf8" />
+            Tutorial Guides & Flowcharts
+          </button>
+
           <button
             onClick={() => setActiveTab("about")}
             style={{
@@ -1166,6 +1195,42 @@ export default function MailOrbitDashboard() {
               </button>
 
               <div style={{ height: "1px", background: "#1e293b", margin: "14px 0 10px" }} />
+
+              <button
+                onClick={() =>
+                  openTutorial(
+                    activeTab === "admin"
+                      ? "admin"
+                      : activeTab === "settings"
+                      ? "relay"
+                      : activeTab === "contacts"
+                      ? "contacts"
+                      : activeTab === "campaigns"
+                      ? "campaigns"
+                      : activeTab === "ai"
+                      ? "ai"
+                      : "overview"
+                  )
+                }
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "10px",
+                  padding: "9px 12px",
+                  borderRadius: "6px",
+                  background: "rgba(56, 189, 248, 0.08)",
+                  color: "#38bdf8",
+                  border: "1px dashed rgba(56, 189, 248, 0.35)",
+                  textAlign: "left",
+                  fontSize: "0.88rem",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  marginBottom: "6px",
+                }}
+              >
+                <BookOpen size={16} />
+                Guides & Flowcharts
+              </button>
 
               <button
                 onClick={() => setActiveTab("about")}
@@ -1482,7 +1547,26 @@ export default function MailOrbitDashboard() {
                         Autonomous cold outreach orchestrator: pacing 30 emails/day with automatic bounce replacement.
                       </p>
                     </div>
-                    <div style={{ display: "flex", gap: "10px" }}>
+                    <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                      <button
+                        onClick={() => openTutorial("overview")}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "8px",
+                          background: "rgba(56, 189, 248, 0.12)",
+                          border: "1px solid #0284c7",
+                          color: "#38bdf8",
+                          padding: "9px 16px",
+                          borderRadius: "6px",
+                          fontWeight: 600,
+                          fontSize: "0.85rem",
+                          cursor: "pointer",
+                        }}
+                      >
+                        <BookOpen size={16} />
+                        📘 System Lifecycle Guide
+                      </button>
                       <button
                         onClick={() => setActiveTab("campaigns")}
                         style={{
@@ -1611,10 +1695,33 @@ export default function MailOrbitDashboard() {
               {/* Campaigns & Batches Tab */}
               {activeTab === "campaigns" && (
                 <div>
-                  <h1 style={{ fontSize: "1.75rem", fontWeight: 700, margin: "0 0 6px" }}>Campaign Purposes & Batches</h1>
-                  <p style={{ color: "#94a3b8", fontSize: "0.92rem", margin: "0 0 24px" }}>
-                    Configure target purposes and auto-slice contacts into timezone-aware daily batches.
-                  </p>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "24px", flexWrap: "wrap", gap: "16px" }}>
+                    <div>
+                      <h1 style={{ fontSize: "1.75rem", fontWeight: 700, margin: "0 0 6px" }}>Campaign Purposes & Batches</h1>
+                      <p style={{ color: "#94a3b8", fontSize: "0.92rem", margin: 0 }}>
+                        Configure target purposes and auto-slice contacts into timezone-aware daily batches.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => openTutorial("campaigns")}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        background: "rgba(56, 189, 248, 0.12)",
+                        border: "1px solid #0284c7",
+                        color: "#38bdf8",
+                        padding: "9px 16px",
+                        borderRadius: "8px",
+                        fontWeight: 600,
+                        fontSize: "0.85rem",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <BookOpen size={16} />
+                      📘 Campaign Setup & Pacing Flowchart
+                    </button>
+                  </div>
 
                   {/* Create Purpose Section */}
                   <div style={{ background: "#111827", padding: "22px", borderRadius: "10px", border: "1px solid #1f2937", marginBottom: "28px" }}>
@@ -1683,10 +1790,33 @@ export default function MailOrbitDashboard() {
               {/* Leads & CSV Import Tab */}
               {activeTab === "contacts" && (
                 <div>
-                  <h1 style={{ fontSize: "1.75rem", fontWeight: 700, margin: "0 0 6px" }}>Leads & CSV Import</h1>
-                  <p style={{ color: "#94a3b8", fontSize: "0.92rem", margin: "0 0 24px" }}>
-                    Upload contacts CSV with automated column normalization, deduplication, and replacement fallback.
-                  </p>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "24px", flexWrap: "wrap", gap: "16px" }}>
+                    <div>
+                      <h1 style={{ fontSize: "1.75rem", fontWeight: 700, margin: "0 0 6px" }}>Leads & CSV Import</h1>
+                      <p style={{ color: "#94a3b8", fontSize: "0.92rem", margin: 0 }}>
+                        Upload contacts CSV with automated column normalization, deduplication, and replacement fallback.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => openTutorial("contacts")}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        background: "rgba(56, 189, 248, 0.12)",
+                        border: "1px solid #0284c7",
+                        color: "#38bdf8",
+                        padding: "9px 16px",
+                        borderRadius: "8px",
+                        fontWeight: 600,
+                        fontSize: "0.85rem",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <BookOpen size={16} />
+                      📘 Leads CSV & Replacement Guide
+                    </button>
+                  </div>
 
                   {/* Upload Box */}
                   <form onSubmit={handleUploadCsv} style={{ background: "#111827", padding: "20px", borderRadius: "10px", border: "1px solid #1f2937", marginBottom: "28px" }}>
@@ -1800,10 +1930,33 @@ export default function MailOrbitDashboard() {
               {/* AI Personalizer & JD Matcher Tab */}
               {activeTab === "ai" && (
                 <div>
-                  <h1 style={{ fontSize: "1.75rem", fontWeight: 700, margin: "0 0 6px" }}>AI Personalizer & JD Matcher</h1>
-                  <p style={{ color: "#94a3b8", fontSize: "0.92rem", margin: "0 0 24px" }}>
-                    Bring Your Own Gemini API Key (BYOK) to scan resumes, extract skills, and generate tailored cold-email icebreakers.
-                  </p>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "24px", flexWrap: "wrap", gap: "16px" }}>
+                    <div>
+                      <h1 style={{ fontSize: "1.75rem", fontWeight: 700, margin: "0 0 6px" }}>AI Personalizer & JD Matcher</h1>
+                      <p style={{ color: "#94a3b8", fontSize: "0.92rem", margin: 0 }}>
+                        Bring Your Own Gemini API Key (BYOK) to scan resumes, extract skills, and generate tailored cold-email icebreakers.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => openTutorial("ai")}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        background: "rgba(56, 189, 248, 0.12)",
+                        border: "1px solid #0284c7",
+                        color: "#38bdf8",
+                        padding: "9px 16px",
+                        borderRadius: "8px",
+                        fontWeight: 600,
+                        fontSize: "0.85rem",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <BookOpen size={16} />
+                      📘 Gemini BYOK & Prompting Guide
+                    </button>
+                  </div>
 
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px", marginBottom: "32px" }}>
                     {/* Gemini Key Config */}
@@ -1895,13 +2048,82 @@ export default function MailOrbitDashboard() {
               {/* Sender Relay & Keys Tab */}
               {activeTab === "settings" && (
                 <div>
-                  <h1 style={{ fontSize: "1.75rem", fontWeight: 700, margin: "0 0 6px" }}>Sender Relay & Keys</h1>
-                  <p style={{ color: "#94a3b8", fontSize: "0.92rem", margin: "0 0 24px" }}>
-                    Configure your zero-password Google Apps Script egress relay over HTTPS:443 with safety circuit breaker.
-                  </p>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "24px", flexWrap: "wrap", gap: "16px" }}>
+                    <div>
+                      <h1 style={{ fontSize: "1.75rem", fontWeight: 700, margin: "0 0 6px" }}>Sender Relay & Keys</h1>
+                      <p style={{ color: "#94a3b8", fontSize: "0.92rem", margin: 0 }}>
+                        Configure your zero-password Google Apps Script egress relay over HTTPS:443 with safety circuit breaker.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => openTutorial("relay")}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        background: "rgba(56, 189, 248, 0.12)",
+                        border: "1px solid #0284c7",
+                        color: "#38bdf8",
+                        padding: "9px 16px",
+                        borderRadius: "8px",
+                        fontWeight: 600,
+                        fontSize: "0.85rem",
+                        cursor: "pointer",
+                        transition: "all 0.2s ease",
+                      }}
+                    >
+                      <BookOpen size={16} />
+                      📘 How to Setup Relay & Flowchart
+                    </button>
+                  </div>
 
                   <div style={{ maxWidth: "600px", background: "#111827", padding: "24px", borderRadius: "10px", border: "1px solid #1f2937" }}>
-                    <h3 style={{ margin: "0 0 16px", fontSize: "1.1rem" }}>Google Apps Script Web App Relay</h3>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+                      <h3 style={{ margin: 0, fontSize: "1.1rem" }}>Google Apps Script Web App Relay</h3>
+                      <button
+                        type="button"
+                        onClick={() => openTutorial("relay")}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          background: "#1e293b",
+                          border: "1px solid #0284c7",
+                          color: "#38bdf8",
+                          padding: "5px 12px",
+                          borderRadius: "6px",
+                          fontSize: "0.78rem",
+                          fontWeight: 600,
+                          cursor: "pointer",
+                        }}
+                      >
+                        <BookOpen size={13} />
+                        Get Relay Script
+                      </button>
+                    </div>
+
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "rgba(56, 189, 248, 0.08)", border: "1px solid rgba(56, 189, 248, 0.25)", padding: "10px 14px", borderRadius: "8px", marginBottom: "18px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.82rem", color: "#e0f2fe" }}>
+                        <Info size={16} color="#38bdf8" />
+                        <span>Requires a free Google Apps Script web app proxy.</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => openTutorial("relay")}
+                        style={{
+                          background: "#0284c7",
+                          color: "#ffffff",
+                          border: "none",
+                          padding: "5px 12px",
+                          borderRadius: "6px",
+                          fontSize: "0.78rem",
+                          fontWeight: 700,
+                          cursor: "pointer",
+                        }}
+                      >
+                        View Setup Guide
+                      </button>
+                    </div>
                     <div style={{ marginBottom: "14px" }}>
                       <label style={{ display: "block", fontSize: "0.82rem", color: "#9ca3af", marginBottom: "4px" }}>
                         Sender Gmail Address
@@ -2233,6 +2455,26 @@ export default function MailOrbitDashboard() {
                     </div>
 
                     <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                      <button
+                        onClick={() => openTutorial("admin")}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "8px",
+                          background: "rgba(245, 158, 11, 0.15)",
+                          border: "1px solid #f59e0b",
+                          color: "#fbbf24",
+                          padding: "8px 14px",
+                          borderRadius: "6px",
+                          fontWeight: 600,
+                          fontSize: "0.82rem",
+                          cursor: "pointer",
+                        }}
+                      >
+                        <BookOpen size={15} />
+                        📘 Admin Architecture Guide
+                      </button>
+
                       <button
                         onClick={handleAdminTriggerTick}
                         disabled={adminActionLoading === "trigger-tick"}
@@ -2625,6 +2867,14 @@ export default function MailOrbitDashboard() {
           )}
         </main>
       </div>
+
+      {/* Structured Tutorial Documentation & Interactive Flowcharts Modal */}
+      {tutorialModalTab && (
+        <TutorialModal
+          initialTab={tutorialModalTab}
+          onClose={() => setTutorialModalTab(null)}
+        />
+      )}
     </div>
   );
 }
