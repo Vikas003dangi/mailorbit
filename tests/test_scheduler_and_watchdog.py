@@ -231,3 +231,88 @@ def test_schedule_cache_never_misses_due_run():
         thu_1000 = datetime(2026, 10, 29, 4, 30, 0, tzinfo=timezone.utc)
         assert cache.is_tick_due(now_utc=thu_1000) is True
 
+
+def test_restart_duplicate_guard_and_missed_batch_runs_once():
+    """
+    Verifies that:
+    1. A batch that already ran today (last_run_date == today) does NOT run again after
+       a restart at 10:30 following a 10:00 run.
+    2. A missed batch (never ran today, 10:00 passed, evaluation at 10:30) runs ONCE,
+       sets last_run_date, and will not run on subsequent ticks/restarts today.
+    """
+    engine = create_db_engine(settings.DATABASE_URL)
+    session_factory = create_session_factory(engine)
+    queue = InMemoryJobQueue()
+
+    # Wednesday 2026-10-28 10:30 UTC
+    ref_wed_1030 = datetime(2026, 10, 28, 10, 30, 0, tzinfo=timezone.utc)
+    today_date = ref_wed_1030.date()
+
+    with session_factory() as session:
+        user, purpose = create_test_user_and_purpose(session, tz_name="UTC")
+
+        # Case 1: Batch already ran today at 10:00
+        ran_batch = Batch(
+            user_id=user.id,
+            purpose_id=purpose.id,
+            name="Already Ran at 10:00",
+            size=10,
+            position=1,
+            scheduled_days=["wed"],
+            scheduled_time="10:00",
+            status="PENDING",
+            last_run_date=today_date,  # Already recorded run today
+        )
+        session.add(ran_batch)
+        session.commit()
+        user_id = user.id
+
+    # 1. Simulate server restart at 10:30 after 10:00 run
+    with session_factory() as session:
+        u = session.get(User, user_id)
+        queued = evaluate_due_batches_for_user(session, u, queue, ref_utc=ref_wed_1030)
+        # MUST NOT run again today!
+        assert len(queued) == 0
+
+    # Case 2: Missed batch (scheduled for 10:00, never ran today, server starts at 10:30)
+    with session_factory() as session:
+        user2, purpose2 = create_test_user_and_purpose(session, tz_name="UTC")
+        missed_batch = Batch(
+            user_id=user2.id,
+            purpose_id=purpose2.id,
+            name="Missed 10:00 Batch",
+            size=10,
+            position=1,
+            scheduled_days=["wed"],
+            scheduled_time="10:00",
+            status="PENDING",
+            last_run_date=None,  # Never ran today
+        )
+        session.add(missed_batch)
+        session.commit()
+        user2_id = user2.id
+        missed_batch_id = missed_batch.id
+
+    # First evaluation at 10:30: Must catch up and run once
+    with session_factory() as session:
+        u2 = session.get(User, user2_id)
+        queued2 = evaluate_due_batches_for_user(session, u2, queue, ref_utc=ref_wed_1030)
+        assert len(queued2) == 1
+        assert queued2[0].id == missed_batch_id
+        assert queued2[0].status == "QUEUED"
+
+    # Simulate dispatch setting last_run_date
+    with session_factory() as session:
+        b = session.get(Batch, missed_batch_id)
+        b.last_run_date = today_date
+        b.status = "COMPLETED"
+        session.commit()
+
+    # Subsequent tick at 10:45: Must NOT run again
+    ref_wed_1045 = datetime(2026, 10, 28, 10, 45, 0, tzinfo=timezone.utc)
+    with session_factory() as session:
+        u2 = session.get(User, user2_id)
+        queued3 = evaluate_due_batches_for_user(session, u2, queue, ref_utc=ref_wed_1045)
+        assert len(queued3) == 0
+
+

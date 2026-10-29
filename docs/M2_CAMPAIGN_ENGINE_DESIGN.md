@@ -34,11 +34,48 @@ In this model, **the daily budget belongs strictly to ONE SENDER ACCOUNT (one Gm
 [Sub-Batch 1] [Sub-Batch 2]                       [Sub-Batch 1] [Sub-Batch 2]
 ```
 
-### 1.1 Fair-Share Balancing Rules
-1. **Scope:** The sender account's daily allowance (e.g., 30/day) is distributed equally across all **active sub-batches** across all **active campaigns** attached to that sender account.
-2. **Formula:**
-   $$\text{Daily Allowance per Sub-Batch} = \min\left(\left\lfloor \frac{\text{Sender Daily Budget}}{\text{Count of Active Sub-Batches}} \right\rfloor, \text{Sub-Batch Pending Count}\right)$$
-   Any integer remainder is allocated 1-by-1 to sub-batches in order of creation/priority.
+### 1.1 Water-Filling Fair-Share Balancing Algorithm
+1. **Scope:** The sender account's daily allowance (default 30/day, clamped to `MailApp.getRemainingDailyQuota()`) is distributed across all **active sub-batches** across all active campaigns attached to that sender using **water-filling**:
+   - Each active sub-batch is assigned an equal base share $\lfloor \text{budget} / N \rfloor$.
+   - Each sub-batch's allocation is capped at its current `pending_count`.
+   - Any leftover unallocated units from capped sub-batches are pooled and redistributed equally among the remaining unsatisfied sub-batches.
+   - The process repeats until the daily budget is fully allocated or all active sub-batches have zero pending leads.
+   - Any remaining integer units ($< \text{active count}$) are distributed 1-by-1 in priority/creation order.
+
+```python
+def water_fill_fair_share(sub_batches: List[SubBatch], daily_budget: int) -> Dict[uuid.UUID, int]:
+    allocations = {sb.id: 0 for sb in sub_batches}
+    pending = {sb.id: sb.pending_count for sb in sub_batches}
+    active_pool = [sb.id for sb in sub_batches if sb.pending_count > 0]
+    remaining_budget = daily_budget
+
+    while remaining_budget > 0 and active_pool:
+        equal_share = remaining_budget // len(active_pool)
+        if equal_share == 0:
+            for sb_id in list(active_pool):
+                if remaining_budget == 0:
+                    break
+                if pending[sb_id] > allocations[sb_id]:
+                    allocations[sb_id] += 1
+                    remaining_budget -= 1
+            break
+
+        progress_made = False
+        for sb_id in list(active_pool):
+            needed = pending[sb_id] - allocations[sb_id]
+            grant = min(needed, equal_share)
+            if grant > 0:
+                allocations[sb_id] += grant
+                remaining_budget -= grant
+                progress_made = True
+            if allocations[sb_id] >= pending[sb_id]:
+                active_pool.remove(sb_id)
+
+        if not progress_made:
+            break
+
+    return allocations
+```
 3. **Ceiling:** The absolute ceiling is the sender relay's real rolling 24-hour remaining quota returned by `MailApp.getRemainingDailyQuota()`. If remaining quota $< 30$, sending stops at the real quota.
 4. **Safety Risk Warning:** If a user configures a daily budget $>30$ on a personal Gmail account, the UI displays a warning modal requiring explicit acknowledgement:
    > *"Deliverability Notice: Setting a daily limit above 30 on a personal Gmail account increases the risk of Google spam filtering or temporary account limits. Real remaining quota is [X]. Do you wish to proceed?"*
@@ -168,29 +205,43 @@ In this model, **the daily budget belongs strictly to ONE SENDER ACCOUNT (one Gm
 
 ---
 
-### Example 3: New Campaign Joins a Running Campaign on the Same Sender
+### Example 3: Two Sub-Batches with Small Pending Queues (10 Pending Each)
 * **Setup:** 1 Sender (budget: 30/day).
-* **Day 1:** Campaign 1 runs solo with 1 sub-batch (60 leads). It uses the full 30 daily allowance (leads #1–#30 sent).
-* **Day 2:** User launches Campaign 2 (30 leads, 1 sub-batch) on the same sender.
-  * 2 active campaigns now share the sender: $30 / 2 = 15$ emails each.
-  * Campaign 1 sends leads #31–#45 (15 remain).
-  * Campaign 2 sends leads #1–#15 (15 remain).
-  * Sender total: $15 + 15 = 30$.
-* **Day 3:** Both send their final 15 leads. Total sent: 30.
-* **Outcome:** The running campaign seamlessly shares bandwidth with the new campaign without manual reconfiguration.
+  * Sub-batch A has 10 pending contacts.
+  * Sub-batch B has 10 pending contacts.
+* **Water-Filling Execution:**
+  * Active sub-batches: 2.
+  * Total pending across sender: $10 + 10 = 20 \le 30$.
+  * Base equal share: $30 / 2 = 15$.
+  * Sub-batch A caps at its pending count: $10$ (cannot send 15).
+  * Sub-batch B caps at its pending count: $10$ (cannot send 15).
+  * Leftover budget: $30 - 20 = 10$ unused (no pending leads remain to consume it).
+* **Final Numbers:**
+  * Sub-batch A sends: **10** (completes).
+  * Sub-batch B sends: **10** (completes).
+  * Unused daily budget: **10**.
+  * Total dispatched today: **20**.
 
 ---
 
-### Example 4: Dynamic Contact Addition to a Running Campaign
-* **Setup:** 1 Sender (budget: 30/day). Campaign has 60 contacts (Sub-batch 1: 30, Sub-batch 2: 30).
-* **Day 1:** Sends 15 from Sub-batch 1, 15 from Sub-batch 2. Total sent: 30. 30 contacts remain.
-* **Mid-Run Event:** User pastes 30 new leads into Sub-batch 2 on Day 1 evening (Sub-batch 2 now has 45 pending).
-* **Day 2:**
-  * Sub-batch 1 has 15 pending $\to$ allocated 15 emails (Sub-batch 1 completes).
-  * Sub-batch 2 has 45 pending $\to$ allocated 15 emails (30 remain).
-  * Total sent on sender: $15 + 15 = 30$.
-* **Day 3:** Sub-batch 2 is the only remaining active sub-batch $\to$ allocated full 30 emails (Sub-batch 2 completes).
-* **Outcome:** 90 total contacts dispatched in 3 days. Sender never exceeds 30/day.
+### Example 4: Asymmetric Sub-Batches (Redistribution of Leftover Share)
+* **Setup:** 1 Sender (budget: 30/day).
+  * Sub-batch 1 has 4 pending contacts.
+  * Sub-batch 2 has 30 pending contacts.
+* **Water-Filling Execution:**
+  * Active candidates: 2.
+  * Iteration 1: Base share $= 30 / 2 = 15$.
+    * Sub-batch 1 needs $4 \le 15 \to$ allocated **4** (Sub-batch 1 completes; removed from active pool).
+    * Sub-batch 2 allocated initial share of **15**.
+    * Unallocated leftover: $30 - 4 - 15 = 11$.
+  * Iteration 2: 1 active candidate (Sub-batch 2).
+    * Sub-batch 2 needs $30 - 15 = 15 > 11$.
+    * Entire leftover 11 is granted to Sub-batch 2: $15 + 11 = \mathbf{26}$.
+* **Final Numbers:**
+  * Sub-batch 1 sends: **4** (0 remain pending; completed).
+  * Sub-batch 2 sends: **26** (4 remain pending for tomorrow).
+  * Total dispatched today: **30** ($4 + 26 = 30$).
+  *(Note: If Sub-batch 2 only had 20 pending leads, it would cap at 20, yielding $4 + 20 = 24$ sent and 6 unused).*
 
 ---
 

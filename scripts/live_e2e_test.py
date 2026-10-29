@@ -23,7 +23,7 @@ from email.mime.text import MIMEText
 BASE_URL = "https://mailorbit-api-nrxf.onrender.com"
 USER_REAL_EMAIL = "vikassdangi@gmail.com"
 SENDER_GMAIL = "vd19055@gmail.com"
-SENDER_APP_PASSWORD = "zohatqiavvwvygko"
+SENDER_APP_PASSWORD = os.getenv("SENDER_APP_PASSWORD", "")
 
 def request_json(method, path, data=None, token=None, files=None, headers_out=None, retries=5):
     url = f"{BASE_URL}{path}"

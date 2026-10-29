@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 
@@ -12,6 +12,20 @@ from packages.shared.models import EgressReport
 from packages.shared.schema import AIKey, Attachment, Batch, Contact, Profile, Purpose, SenderRelay, User
 
 router = APIRouter(prefix="/api/v1/admin", tags=["Superuser Admin"])
+
+
+@router.get("/debug-ip")
+def debug_client_ip(
+    request: Request,
+    admin_user: User = Depends(require_superuser),
+) -> Dict[str, Any]:
+    """Temporary admin-only debug view of detected IP."""
+    from apps.api.services.rate_limiter import get_client_ip
+    detected_ip = get_client_ip(request)
+    return {
+        "detected_client_ip": detected_ip,
+        "trusted_proxy_count": settings.TRUSTED_PROXY_COUNT,
+    }
 
 
 @router.get("/stats")

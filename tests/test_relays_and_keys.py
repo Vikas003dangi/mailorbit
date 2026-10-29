@@ -132,3 +132,87 @@ def test_secrets_encryption_and_zero_leakage():
         assert db.query(AIKey).filter(AIKey.id == key_id).first() is None
     finally:
         db.close()
+
+
+def test_production_batch_without_relay_pauses_and_zero_contacts_sent(monkeypatch):
+    """
+    Verifies that in production mode, a batch without an active relay:
+    1. Stops with 'Connect your sender' status.
+    2. Never marks any contact as sent or delivered.
+    """
+    from apps.api.config import settings
+    from apps.worker.dispatcher import dispatch_batch
+    from packages.shared.schema import Batch, Contact, Purpose, User
+
+    # Force production environment
+    monkeypatch.setattr(settings, "ENVIRONMENT", "production")
+
+    db: Session = SessionFactory()
+    try:
+        user_id = uuid.uuid4()
+        user = User(id=user_id, email=f"prod_sender_test_{uuid.uuid4().hex[:6]}@example.com", password_hash="dummy")
+        purpose = Purpose(id=uuid.uuid4(), user_id=user_id, name="Eng Outreach")
+        batch = Batch(id=uuid.uuid4(), user_id=user_id, purpose_id=purpose.id, name="Prod Batch", size=10, status="PENDING")
+        c1 = Contact(id=uuid.uuid4(), user_id=user_id, purpose_id=purpose.id, batch_id=batch.id, email="lead1@example.com", status="PENDING")
+        c2 = Contact(id=uuid.uuid4(), user_id=user_id, purpose_id=purpose.id, batch_id=batch.id, email="lead2@example.com", status="PENDING")
+        db.add_all([user, purpose, batch, c1, c2])
+        db.commit()
+
+        # Execute dispatch
+        res = dispatch_batch(session=db, batch_id=batch.id)
+
+        assert res["status"] == "PAUSED"
+        assert "Connect your sender" in res["paused_reason"]
+        assert res["sent_count"] == 0
+
+        # Check database records directly
+        db.refresh(batch)
+        db.refresh(c1)
+        db.refresh(c2)
+
+        assert batch.status == "PAUSED"
+        assert "Connect your sender" in batch.paused_reason
+        assert c1.status == "PENDING"
+        assert c1.sent_at is None
+        assert c2.status == "PENDING"
+        assert c2.sent_at is None
+    finally:
+        db.close()
+
+
+def test_contacts_never_marked_sent_without_real_relay_response():
+    """
+    Verifies that if a relay client encounters an error or fails to dispatch,
+    contact status is never marked SENT or DELIVERED.
+    """
+    from apps.worker.dispatcher import dispatch_batch
+    from apps.worker.apps_script_relay import RelayError
+    from packages.shared.schema import Batch, Contact, Purpose, User
+
+    class MockFailingRelay:
+        def send_email(self, *args, **kwargs):
+            raise RelayError("Simulated Apps Script 500 error from Google servers")
+
+    db: Session = SessionFactory()
+    try:
+        user_id = uuid.uuid4()
+        user = User(id=user_id, email=f"failing_relay_{uuid.uuid4().hex[:6]}@example.com", password_hash="dummy")
+        purpose = Purpose(id=uuid.uuid4(), user_id=user_id, name="Test Outreach")
+        batch = Batch(id=uuid.uuid4(), user_id=user_id, purpose_id=purpose.id, name="Failing Batch", size=10, status="PENDING")
+        contact = Contact(id=uuid.uuid4(), user_id=user_id, purpose_id=purpose.id, batch_id=batch.id, email="lead@reliabledomain.com", status="PENDING")
+        db.add_all([user, purpose, batch, contact])
+        db.commit()
+
+        # Run dispatch with explicit failing sender
+        res = dispatch_batch(session=db, batch_id=batch.id, sender=MockFailingRelay())
+
+        assert res["sent_count"] == 0
+        db.refresh(contact)
+        # Contact must NOT be marked SENT
+        assert contact.status != "SENT"
+        assert contact.status != "DELIVERED"
+        assert contact.sent_at is None
+        assert contact.status == "FAILED"
+        assert "Simulated Apps Script 500 error" in contact.error
+    finally:
+        db.close()

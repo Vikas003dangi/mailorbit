@@ -17,7 +17,7 @@ from apps.worker.apps_script_relay import (
 from apps.worker.pacer import Pacer
 from apps.worker.sender import LocalMailpitSender
 from packages.shared.crypto import EncryptionService, EnvKeyManager
-from packages.shared.schema import AIKey, Batch, Contact, DoNotContact, Profile, Purpose, SenderRelay
+from packages.shared.schema import AIKey, Batch, Contact, DoNotContact, Profile, Purpose, SenderRelay, User
 from packages.shared.unsubscribe import (
     append_unsubscribe_footer,
     generate_unsubscribe_headers,
@@ -118,12 +118,13 @@ def resolve_sender_for_batch(
     session: Session,
     user_id: uuid.UUID,
     explicit_sender: Optional[Any] = None,
-) -> Tuple[Any, str, Optional[SenderRelay]]:
+) -> Tuple[Optional[Any], str, Optional[SenderRelay]]:
     """
     Resolves the appropriate email sender for a batch:
-    - If explicit_sender is passed, uses it.
-    - If USE_FAKE_SMTP is True or no active relay is found, uses LocalMailpitSender.
+    - If explicit_sender is passed (e.g. mock test fixture), uses it.
     - Otherwise decrypts the user's active Google Apps Script relay.
+    - LocalMailpitSender is ONLY permitted when ENVIRONMENT is development AND USE_FAKE_SMTP is True.
+    - In production/staging, if no active relay is found, returns (None, "", None).
     """
     if explicit_sender is not None:
         return explicit_sender, "outreach@mailorbit.local", None
@@ -134,7 +135,7 @@ def resolve_sender_for_batch(
         .first()
     )
 
-    if relay and not settings.USE_FAKE_SMTP:
+    if relay:
         try:
             crypto = EncryptionService(EnvKeyManager(settings.ENCRYPTION_MASTER_KEY))
             token = crypto.decrypt(relay.auth_token_ciphertext)
@@ -143,7 +144,11 @@ def resolve_sender_for_batch(
         except Exception as exc:
             logger.error("Failed to initialize Apps Script relay for user %s: %s", user_id, exc)
 
-    return LocalMailpitSender(), "outreach@mailorbit.local", None
+    # LocalMailpitSender is strictly gated to development mode
+    if settings.ENVIRONMENT == "development" and settings.USE_FAKE_SMTP:
+        return LocalMailpitSender(), "outreach@mailorbit.local", None
+
+    return None, "", None
 
 
 def dispatch_batch(
@@ -156,8 +161,9 @@ def dispatch_batch(
 ) -> Dict[str, Any]:
     """
     Executes an outreach batch:
-    - Resolves sender (Apps Script Relay or Mailpit).
-    - Checks remaining daily quota on relay.
+    - Resolves sender (Apps Script Relay or LocalMailpit in dev).
+    - If sender is missing, unverified, or over quota: stops with clear status, 0 sent.
+    - Records last_run_date to prevent duplicate runs on restarts.
     - Pre-send verifies each lead.
     - If verification fails: immediately marks lead INACTIVE and auto-tops up the batch.
     - Evaluates 10% Batch Safety Pause circuit breaker to protect sender domain reputation.
@@ -172,6 +178,19 @@ def dispatch_batch(
     effective_from = from_email or default_from
     pacer = pacer or Pacer(min_seconds=0.0, max_seconds=0.0)
 
+    # In production, missing or unverified sender must pause with clear status
+    if sender_client is None:
+        batch.status = "PAUSED"
+        batch.paused_reason = "Connect your sender: No active Google Apps Script relay configured"
+        session.commit()
+        return {
+            "batch_id": str(batch.id),
+            "batch_name": batch.name,
+            "status": "PAUSED",
+            "paused_reason": batch.paused_reason,
+            "sent_count": 0,
+        }
+
     # Check relay quota before starting
     if relay and relay.remaining_quota is not None and relay.remaining_quota <= 0:
         relay.status = "QUOTA_EXCEEDED"
@@ -185,6 +204,14 @@ def dispatch_batch(
             "paused_reason": batch.paused_reason,
             "sent_count": 0,
         }
+
+    # Record last_run_date in user's timezone to guard against restart duplicate dispatch
+    from apps.worker.scheduler import get_user_local_datetime
+    user = session.query(User).filter(User.id == batch.user_id).first()
+    user_tz = user.timezone if user else "UTC"
+    local_dt = get_user_local_datetime(user_tz)
+    batch.last_run_date = local_dt.date()
+    session.commit()
 
     purpose = None
     if batch.purpose_id:

@@ -326,7 +326,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 SENDER_GMAIL = "vd19055@gmail.com"
-SENDER_APP_PASSWORD = os.getenv("SENDER_APP_PASSWORD", "zohatqiavvwvygko")
+SENDER_APP_PASSWORD = os.getenv("SENDER_APP_PASSWORD", "")
 
 for idx in range(1, 3):
     msg = MIMEMultipart("alternative")

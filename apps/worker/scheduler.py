@@ -77,6 +77,8 @@ def evaluate_due_batches_for_user(
     for b in user_batches:
         if b.status in ("QUEUED", "ACTIVE"):
             busy_purposes.add(b.purpose_id)
+        elif b.last_run_date == today_date:
+            busy_purposes.add(b.purpose_id)
         elif b.status == "COMPLETED" and b.updated_at:
             b_updated = b.updated_at
             if b_updated.tzinfo is None:
@@ -105,6 +107,10 @@ def evaluate_due_batches_for_user(
             earliest_by_purpose[pb.purpose_id] = pb
 
     for purpose_id, candidate in earliest_by_purpose.items():
+        if candidate.last_run_date == today_date:
+            logger.debug("Batch %s already ran today (%s)", candidate.name, today_date)
+            continue
+
         if not is_batch_scheduled_for_today(candidate, local_dt):
             logger.debug("Batch %s not scheduled for today (%s)", candidate.name, local_dt.strftime("%a"))
             continue

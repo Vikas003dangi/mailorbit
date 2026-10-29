@@ -3,6 +3,7 @@ import uuid
 from sqlalchemy import (
     Boolean,
     Column,
+    Date,
     DateTime,
     ForeignKey,
     Index,
@@ -141,6 +142,7 @@ class Batch(Base):
     scheduled_days = Column(JSONB, default=lambda: ["mon", "tue", "wed", "thu", "fri"], nullable=False)
     status = Column(String(50), default="PENDING", nullable=False)  # PENDING, ACTIVE, COMPLETED, PAUSED
     paused_reason = Column(Text, nullable=True)
+    last_run_date = Column(Date, nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
 
