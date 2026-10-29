@@ -37,3 +37,33 @@ This separation introduced multiple production failure modes:
 5. **Decommission GitHub Pages**:
    - GitHub Pages deployment workflow has been removed from the user-facing pipeline. All users now access the unified Render service.
 
+---
+
+## 2026-10-29: Interactive Tutorial Documentation & Architecture Flowcharts Across All Modules
+
+### Context
+Users navigating MailOrbit across its various workspaces (Sender Relay & Keys, Leads & CSV Import, Campaigns & Batches, AI Personalizer & JD Matcher, Overview Command Center, and Master Admin Deck) required comprehensive, visual, and immediately actionable guidance on how each component operates under the hood, how deliverability safeguards function, and how to deploy the open-source Google Apps Script proxy.
+
+### Decision
+1. **Context-Aware Tutorial Buttons Across All Views**:
+   - Every view in the platform now contains an explicit, prominent `[ 📘 Setup Guide & Flowchart ]` button in its header and contextual helper cards.
+   - A persistent `[ 📘 Guides & Flowcharts ]` shortcut is embedded in the main navigation sidebar.
+   - A top header `[ 📘 Tutorial Guides & Flowcharts ]` button is available even on the unauthenticated login/signup landing page.
+
+2. **Self-Contained Interactive SVG Architectural Diagrams**:
+   - Implemented 6 responsive, vector-rendered SVG flowcharts for each functional module:
+     1. **Sender Relay & Apps Script**: FastAPI -> HTTPS:443 POST -> Apps Script Web App -> Quota & Idempotency Check -> Gmail MX Core -> Recipient Inbox (with Safety Circuit Breaker).
+     2. **Leads & Dynamic Fallback Pool**: CSV Ingestion -> Fuzzy Column Detection -> RFC-2606 Blacklist Filter -> Active Batch (30/day) + Standby Reserve Pool with instant bounce replacement.
+     3. **Campaigns & Deliverability Pacing**: Campaign Purpose -> Auto-Batch Partitioner -> Quiet Hours & Jitter (60-180s) -> RFC-8058 One-Click Unsubscribe Injection.
+     4. **Gemini BYOK AI Personalizer**: Candidate Resume + Target JD -> Client-Side Encrypted Key -> Gemini 1.5 Flash -> Tailored 2-Sentence Hook Generator -> Instant Template Insertion.
+     5. **Unified Host Architecture**: Next.js SPA at root `/` -> Relative calls to FastAPI `/api/v1` -> Neon Serverless PostgreSQL 16 + cron-job.org /tick Watchdog + Google Apps Script Relay.
+     6. **Superuser Control Deck**: Strict JWT email whitelist -> Admin FastAPI Middleware -> Real-time Telemetry, User Status Toggles, Batch Inspection, Force-Tick Dispatcher, Egress Network Probes.
+
+3. **1-Click Copy Snippets**:
+   - Embedded complete, copyable production code directly in the tutorial modals:
+     - 197-line production `mailorbit_apps_script_relay.js`
+     - Validated sample CSV template with fuzzy header compatibility
+     - Tested cold email outreach template
+     - Gemini 1.5 Flash structured prompting template
+
+
