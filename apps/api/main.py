@@ -9,7 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from apps.api.config import settings
-from apps.api.dependencies import get_db
+from apps.api.dependencies import get_current_user, get_db
 from apps.api.diagnostics import run_egress_check
 from apps.api.routers import (
     admin,
@@ -192,7 +192,7 @@ def run_tick(
 
 @app.get("/api/v1/diagnostics/egress", response_model=EgressReport, tags=["Diagnostics"])
 def get_egress_diagnostics(
-    _=Security(verify_tick_secret),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Protected diagnostic endpoint testing outbound network egress:
