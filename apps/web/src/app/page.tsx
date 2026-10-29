@@ -42,6 +42,8 @@ import {
   Paperclip,
   ShieldAlert,
   ArrowRightLeft,
+  Menu,
+  X,
 } from "lucide-react";
 import TutorialModal, { TutorialTab } from "./TutorialModal";
 import HighLimitWarningModal from "./components/HighLimitWarningModal";
@@ -227,6 +229,7 @@ export default function MailOrbitDashboard() {
   const [activeTab, setActiveTab] = useState<
     "overview" | "campaigns" | "contacts" | "ai" | "quarantine" | "settings" | "about" | "admin"
   >("overview");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Interactive Tutorial / Guide Modal State
   const [tutorialModalTab, setTutorialModalTab] = useState<TutorialTab | null>(null);
@@ -1189,7 +1192,7 @@ export default function MailOrbitDashboard() {
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          padding: "12px 28px",
+          padding: "10px 20px",
           background: "#0f172a",
           borderBottom: "1px solid #1e293b",
           position: "sticky",
@@ -1197,10 +1200,29 @@ export default function MailOrbitDashboard() {
           zIndex: 40,
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "24px" }}>
-          <OrbitalLogo size={38} />
+        <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+          {/* Mobile hamburger menu toggle */}
+          <button
+            onClick={() => setMobileMenuOpen((prev) => !prev)}
+            className="show-on-mobile"
+            aria-label="Toggle navigation menu"
+            style={{
+              background: "#1e293b",
+              border: "1px solid #334155",
+              color: "#e2e8f0",
+              padding: "6px 9px",
+              borderRadius: "6px",
+              cursor: "pointer",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            {mobileMenuOpen ? <X size={18} color="#38bdf8" /> : <Menu size={18} color="#e2e8f0" />}
+          </button>
+          <OrbitalLogo size={36} />
           {isDemoMode && (
             <div
+              className="hide-on-mobile"
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -1229,7 +1251,7 @@ export default function MailOrbitDashboard() {
         </div>
 
         {/* Right Header Navigation & User Actions */}
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
           <button
             onClick={() => openTutorial("relay")}
             style={{
@@ -1239,7 +1261,7 @@ export default function MailOrbitDashboard() {
               background: "rgba(56, 189, 248, 0.1)",
               color: "#38bdf8",
               border: "1px solid rgba(56, 189, 248, 0.3)",
-              padding: "6px 14px",
+              padding: "6px 12px",
               borderRadius: "6px",
               fontSize: "0.82rem",
               fontWeight: 600,
@@ -1248,11 +1270,12 @@ export default function MailOrbitDashboard() {
             }}
           >
             <BookOpen size={14} color="#38bdf8" />
-            Tutorial Guides & Flowcharts
+            <span className="hide-on-mobile">Tutorial Guides & Flowcharts</span>
+            <span className="show-on-mobile" style={{ fontSize: "0.75rem" }}>Guides</span>
           </button>
 
           <button
-            onClick={() => setActiveTab("about")}
+            onClick={() => { setActiveTab("about"); setMobileMenuOpen(false); }}
             style={{
               display: "flex",
               alignItems: "center",
@@ -1261,7 +1284,7 @@ export default function MailOrbitDashboard() {
               color: activeTab === "about" ? "#38bdf8" : "#94a3b8",
               border: "1px solid",
               borderColor: activeTab === "about" ? "#0284c7" : "#334155",
-              padding: "6px 14px",
+              padding: "6px 12px",
               borderRadius: "6px",
               fontSize: "0.82rem",
               fontWeight: 600,
@@ -1270,7 +1293,8 @@ export default function MailOrbitDashboard() {
             }}
           >
             <Code2 size={14} color="#38bdf8" />
-            Creator & Portfolio
+            <span className="hide-on-mobile">Creator & Portfolio</span>
+            <span className="show-on-mobile" style={{ fontSize: "0.75rem" }}>Creator</span>
           </button>
 
           {!token && !isDemoMode ? (
@@ -1395,9 +1419,10 @@ export default function MailOrbitDashboard() {
       )}
 
       {/* Main Layout Container */}
-      <div style={{ display: "flex", flex: 1 }}>
+      <div style={{ display: "flex", flex: 1, position: "relative" }}>
         {/* Left Sidebar Navigation */}
         <aside
+          className={`app-sidebar ${mobileMenuOpen ? "sidebar-open" : ""}`}
           style={{
             width: "240px",
             background: "#0d1322",
@@ -1415,7 +1440,7 @@ export default function MailOrbitDashboard() {
 
             <nav style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
               <button
-                onClick={() => setActiveTab("overview")}
+                onClick={() => { setActiveTab("overview"); setMobileMenuOpen(false); }}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -1436,7 +1461,7 @@ export default function MailOrbitDashboard() {
               </button>
 
               <button
-                onClick={() => setActiveTab("campaigns")}
+                onClick={() => { setActiveTab("campaigns"); setMobileMenuOpen(false); }}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -1457,7 +1482,7 @@ export default function MailOrbitDashboard() {
               </button>
 
               <button
-                onClick={() => setActiveTab("contacts")}
+                onClick={() => { setActiveTab("contacts"); setMobileMenuOpen(false); }}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -1478,7 +1503,7 @@ export default function MailOrbitDashboard() {
               </button>
 
               <button
-                onClick={() => setActiveTab("ai")}
+                onClick={() => { setActiveTab("ai"); setMobileMenuOpen(false); }}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -1499,7 +1524,7 @@ export default function MailOrbitDashboard() {
               </button>
 
               <button
-                onClick={() => setActiveTab("quarantine")}
+                onClick={() => { setActiveTab("quarantine"); setMobileMenuOpen(false); }}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -1520,7 +1545,7 @@ export default function MailOrbitDashboard() {
               </button>
 
               <button
-                onClick={() => setActiveTab("settings")}
+                onClick={() => { setActiveTab("settings"); setMobileMenuOpen(false); }}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -1543,7 +1568,8 @@ export default function MailOrbitDashboard() {
               <div style={{ height: "1px", background: "#1e293b", margin: "14px 0 10px" }} />
 
               <button
-                onClick={() =>
+                onClick={() => {
+                  setMobileMenuOpen(false);
                   openTutorial(
                     activeTab === "admin"
                       ? "admin"
@@ -1556,8 +1582,8 @@ export default function MailOrbitDashboard() {
                       : activeTab === "ai"
                       ? "ai"
                       : "overview"
-                  )
-                }
+                  );
+                }}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -1579,7 +1605,7 @@ export default function MailOrbitDashboard() {
               </button>
 
               <button
-                onClick={() => setActiveTab("about")}
+                onClick={() => { setActiveTab("about"); setMobileMenuOpen(false); }}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -1601,7 +1627,7 @@ export default function MailOrbitDashboard() {
 
               {isSuperuser && (
                 <button
-                  onClick={() => setActiveTab("admin")}
+                  onClick={() => { setActiveTab("admin"); setMobileMenuOpen(false); }}
                   style={{
                     display: "flex",
                     alignItems: "center",
@@ -1647,8 +1673,16 @@ export default function MailOrbitDashboard() {
           </div>
         </aside>
 
+        {/* Mobile backdrop */}
+        {mobileMenuOpen && (
+          <div
+            className="sidebar-backdrop"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+        )}
+
         {/* Main Content Area */}
-        <main style={{ flex: 1, padding: "32px 36px", overflowY: "auto", maxWidth: "1280px" }}>
+        <main className="app-main-content" style={{ flex: 1, padding: "32px 36px", overflowY: "auto", overflowX: "hidden", maxWidth: "1280px" }}>
           {/* Status Message Notification */}
           {statusMessage && (
             <div
@@ -1754,7 +1788,7 @@ export default function MailOrbitDashboard() {
                   }}
                 >
                   <AlertCircle size={16} color="#eab308" style={{ flexShrink: 0 }} />
-                  <span>Email verification is temporarily unavailable. Accounts will be active upon registration.</span>
+                  <span>Email verification is temporarily unavailable. Account created in unverified mode with limited access.</span>
                 </div>
               )}
 
@@ -2484,7 +2518,8 @@ export default function MailOrbitDashboard() {
                       </div>
                     </div>
 
-                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
+                    <div className="responsive-table-wrapper" style={{ overflowX: "auto", width: "100%" }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
                       <thead>
                         <tr style={{ borderBottom: "1px solid #1f2937", color: "#9ca3af", textAlign: "left" }}>
                           <th style={{ padding: "10px", width: "36px" }}>
@@ -2556,6 +2591,7 @@ export default function MailOrbitDashboard() {
                     </table>
                   </div>
                 </div>
+              </div>
               )}
 
               {/* AI Copilot & Quick Send Tab */}

@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build && node -e \"const fs = require('fs'); const path = require('path'); const src = path.resolve('out'); const dst = path.resolve('../api/static'); fs.rmSync(dst, { recursive: true, force: true }); fs.cpSync(src, dst, { recursive: true });\"",
     "start": "next start",
     "lint": "next lint"
   },
