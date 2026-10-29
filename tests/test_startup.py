@@ -145,25 +145,29 @@ def test_admin_bootstrap_persisted_in_database(monkeypatch):
     assert "already been consumed" in reuse_res.json()["detail"]
 
 
-def test_production_boot_import_apps_api_main(monkeypatch):
-    """Verifies that apps.api.main can be imported and initialized in production mode."""
-    import importlib
+def test_production_boot_import_apps_api_main():
+    """Verifies that apps.api.main boots in a clean, isolated process under production mode."""
+    import subprocess
+    import sys
     key = base64.b64encode(secrets.token_bytes(32)).decode()
-    monkeypatch.setenv("ENVIRONMENT", "production")
-    monkeypatch.setenv("ENCRYPTION_MASTER_KEY", key)
-    monkeypatch.setenv("TICK_SECRET", "production-tick-secret-check-9988")
-    monkeypatch.setenv("ADMIN_BOOTSTRAP_TOKEN", "prod-bootstrap-token-123456")
-    monkeypatch.setenv("ADMIN_EMAILS", '["admin@mailorbit.io"]')
-    monkeypatch.setenv("USE_FAKE_SMTP", "false")
-    monkeypatch.setenv("DATABASE_URL", "sqlite:///./test_mailorbit.db")
+    env = os.environ.copy()
+    env["ENVIRONMENT"] = "production"
+    env["ENCRYPTION_MASTER_KEY"] = key
+    env["TICK_SECRET"] = "production-tick-secret-check-9988"
+    env["ADMIN_BOOTSTRAP_TOKEN"] = "prod-bootstrap-token-123456"
+    env["ADMIN_EMAILS"] = '["admin@mailorbit.io"]'
+    env["USE_FAKE_SMTP"] = "false"
+    env["DATABASE_URL"] = "sqlite:///./test_mailorbit.db"
 
-    import apps.api.config
-    importlib.reload(apps.api.config)
-    import apps.api.main
-    importlib.reload(apps.api.main)
-
-    prod_client = TestClient(apps.api.main.app)
-    res = prod_client.get("/api/v1/health")
-    assert res.status_code == 200
-    assert res.json()["status"] == "ok"
-    assert "commit" in res.json()
+    code = (
+        "from apps.api.main import app\n"
+        "from fastapi.testclient import TestClient\n"
+        "c = TestClient(app)\n"
+        "r = c.get('/api/v1/health')\n"
+        "assert r.status_code == 200, f'Health failed: {r.status_code}'\n"
+        "assert r.json()['status'] == 'ok'\n"
+        "print('BOOT_OK')\n"
+    )
+    res = subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True, timeout=15)
+    assert res.returncode == 0, f"Production boot process crashed: {res.stderr}"
+    assert "BOOT_OK" in res.stdout

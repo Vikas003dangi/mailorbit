@@ -179,39 +179,6 @@ def get_health():
     )
 
 
-@app.get("/api/v1/system/debug-hops", tags=["System"])
-def debug_hops(request: Request, _=Security(verify_tick_secret)):
-    """
-    Temporary diagnostics endpoint protected by tick secret to inspect live reverse-proxy hops.
-    """
-    raw_xff = request.headers.get("X-Forwarded-For", "")
-    ips = [x.strip() for x in raw_xff.split(",") if x.strip()]
-    masked_ips = []
-    for ip in ips:
-        parts = ip.split(".")
-        if len(parts) == 4:
-            masked_ips.append(f"{parts[0]}.{parts[1]}.{parts[2]}.xxx")
-        else:
-            masked_ips.append(ip[: len(ip) // 2] + "...")
-
-    selected_ip = rate_limiter.get_client_ip(request)
-    sel_parts = selected_ip.split(".")
-    if len(sel_parts) == 4:
-        sel_masked = f"{sel_parts[0]}.{sel_parts[1]}.{sel_parts[2]}.xxx"
-    else:
-        sel_masked = selected_ip
-
-    return {
-        "hops_count": len(ips),
-        "raw_xff_masked": ", ".join(masked_ips),
-        "selected_ip_masked": sel_masked,
-        "trusted_proxy_count": getattr(settings, "TRUSTED_PROXY_COUNT", 1),
-        "cf_connecting_ip": bool(request.headers.get("CF-Connecting-IP")),
-        "client_host": request.client.host if request.client else None,
-        "commit": settings.COMMIT_HASH,
-    }
-
-
 @app.api_route("/api/v1/tick", methods=["GET", "POST", "HEAD"], response_model=TickResponse, tags=["Watchdog"])
 def run_tick(
     batch_size: int = Query(10, ge=1, le=100),
