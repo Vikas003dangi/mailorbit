@@ -175,16 +175,6 @@ def get_health():
     )
 
 
-@app.get("/api/v1/debug-ip", tags=["Debug"], include_in_schema=False)
-def debug_client_ip(request: Request):
-    from apps.api.services.rate_limiter import get_client_ip
-    detected_ip = get_client_ip(request)
-    return {
-        "detected_client_ip": detected_ip,
-        "trusted_proxy_count": settings.TRUSTED_PROXY_COUNT,
-    }
-
-
 @app.api_route("/api/v1/tick", methods=["GET", "POST"], response_model=TickResponse, tags=["Watchdog"])
 def run_tick(
     batch_size: int = Query(10, ge=1, le=100),
