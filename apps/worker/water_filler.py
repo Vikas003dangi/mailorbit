@@ -83,3 +83,4 @@ def water_fill_fair_share(
             break
 
     return allocations
+
