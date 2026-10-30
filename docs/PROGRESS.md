@@ -37,7 +37,7 @@
 | :--- | :--- | :---: | :--- |
 | **2026-10-30 08:05:19** | Initial OTP, Theme Switcher, Account Settings & Sticky Sidebar | `eedc9e7` | 78 pytest tests passing; `/api/v1/health` verified live on Render. |
 | **2026-10-30 09:45:00** | Initialized `docs/MASTER_BUILD_BRIEF.md` and `docs/PROGRESS.md` | `ccf793e` | Brief stored verbatim per owner directive. |
-| **2026-10-30 12:35:00** | M1: DB-backed system mailer, OTP abuse limits, floor reservations, Next.js static build export | Pending Push | 78 pytest tests green (Python 3.11.9), ruff clean, alembic check clean. |
+| **2026-10-30 12:35:00** | M1: DB-backed system mailer, OTP abuse limits, floor reservations, Next.js static build export | `fad9d2d` | Verified live on Render: `/api/v1/health` shows `fad9d2d`, `/status` reports Alembic head `3df3d63f3b76` and DB Connected. 78 pytest tests passing. |
 
 ---
 
