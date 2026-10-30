@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from apps.api.config import settings
 from apps.api.dependencies import get_db, require_superuser
 from apps.api.diagnostics import run_egress_check
+from apps.api.services.system_mailer import get_system_relay_budget
 from packages.shared.models import EgressReport
 from packages.shared.schema import AIKey, Attachment, Batch, Contact, Profile, Purpose, SenderRelay, User
 
@@ -101,8 +102,18 @@ def get_system_health(
             "protocol": "Google Apps Script HTTPS Relay (443)",
             "circuit_breaker": "10% Batch Safety Pause active",
         },
+        "system_relay_budget": get_system_relay_budget(db=db),
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
+
+
+@router.get("/relay-budget")
+def get_admin_system_relay_budget(
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_superuser),
+) -> Dict[str, Any]:
+    """Returns platform transactional relay budget telemetry (restricted to verified superusers)."""
+    return get_system_relay_budget(db=db)
 
 
 @router.get("/users")

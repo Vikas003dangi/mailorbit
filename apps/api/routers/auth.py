@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 import hashlib
+import logging
 import secrets
 from typing import Optional
 import uuid
@@ -8,12 +9,17 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from sqlalchemy.orm import Session
 
 from apps.api.config import settings
+
+logger = logging.getLogger("mailorbit.auth")
 from apps.api.dependencies import get_admin_emails, get_current_user, get_db
 from apps.api.services.rate_limiter import rate_limiter
 from apps.api.services.system_mailer import (
+    send_account_deleted_email,
     send_otp_email,
+    send_password_changed_email,
     send_password_reset_email,
     send_verification_email,
+    send_welcome_email,
 )
 from packages.shared.auth import (
     create_access_token,
@@ -22,7 +28,8 @@ from packages.shared.auth import (
     hash_password,
     verify_password,
 )
-from packages.shared.schema import BootstrapRecord, EmailOTP, Profile, User
+from packages.shared.cloudinary import delete_attachment
+from packages.shared.schema import Attachment, BootstrapRecord, EmailOTP, Profile, User
 
 router = APIRouter(prefix="/api/v1/auth", tags=["Authentication"])
 
@@ -143,13 +150,13 @@ def set_refresh_cookie(response: Response, refresh_token: str) -> None:
 @router.post("/signup", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 def signup(request: Request, payload: SignupRequest, response: Response, db: Session = Depends(get_db)):
     """Registers a new user workspace, creates verification token, and returns auth tokens."""
-    rate_limiter.check(request, "signup", max_requests=5, window_seconds=3600)
+    rate_limiter.check(request, "signup", max_requests=5, window_seconds=3600, db=db)
 
     existing = db.query(User).filter(User.email == payload.email.lower()).first()
     if existing:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="An account with this email address already exists",
+            detail="An account with this email address already exists. Please log in.",
         )
 
     pwd_hash = hash_password(payload.password)
@@ -160,16 +167,18 @@ def signup(request: Request, payload: SignupRequest, response: Response, db: Ses
     user = User(
         email=payload.email.lower(),
         password_hash=pwd_hash,
+        sender_name=payload.name.strip() if payload.name else None,
         timezone=payload.timezone,
         is_email_verified=False,
         verification_token_hash=token_hash,
         verification_sent_at=now,
+        token_version=1,
     )
     db.add(user)
     db.flush()
 
     # Create associated profile
-    profile = Profile(user_id=user.id)
+    profile = Profile(user_id=user.id, full_name=payload.name.strip() if payload.name else None)
     db.add(profile)
     db.commit()
     db.refresh(user)
@@ -182,8 +191,9 @@ def signup(request: Request, payload: SignupRequest, response: Response, db: Ses
     else:
         info_message = "Verification email dispatched. Please check your inbox to verify your account."
 
-    access_token = create_access_token(str(user.id), user.email, settings.TICK_SECRET)
-    refresh_token = create_refresh_token(str(user.id), settings.TICK_SECRET)
+    user_ver = getattr(user, "token_version", 1) or 1
+    access_token = create_access_token(str(user.id), user.email, settings.TICK_SECRET, token_version=user_ver)
+    refresh_token = create_refresh_token(str(user.id), settings.TICK_SECRET, token_version=user_ver)
     set_refresh_cookie(response, refresh_token)
 
     return TokenResponse(
@@ -197,7 +207,7 @@ def signup(request: Request, payload: SignupRequest, response: Response, db: Ses
 @router.post("/login", response_model=TokenResponse)
 def login(request: Request, payload: LoginRequest, response: Response, db: Session = Depends(get_db)):
     """Authenticates user credentials and issues new access and refresh tokens with dual-keyed rate limiting."""
-    rate_limiter.check(request, "login", max_requests=5, window_seconds=60, identifier=payload.email)
+    rate_limiter.check(request, "login", max_requests=5, window_seconds=60, identifier=payload.email, db=db)
 
     user = db.query(User).filter(User.email == payload.email.lower(), User.is_active == True).first()
     if not user or not verify_password(payload.password, user.password_hash):
@@ -206,8 +216,9 @@ def login(request: Request, payload: LoginRequest, response: Response, db: Sessi
             detail="Incorrect email or password",
         )
 
-    access_token = create_access_token(str(user.id), user.email, settings.TICK_SECRET)
-    refresh_token = create_refresh_token(str(user.id), settings.TICK_SECRET)
+    user_ver = getattr(user, "token_version", 1) or 1
+    access_token = create_access_token(str(user.id), user.email, settings.TICK_SECRET, token_version=user_ver)
+    refresh_token = create_refresh_token(str(user.id), settings.TICK_SECRET, token_version=user_ver)
     set_refresh_cookie(response, refresh_token)
 
     return TokenResponse(
@@ -293,15 +304,15 @@ def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db))
 
 @router.post("/signup-otp")
 def request_signup_otp(request: Request, payload: SignupOtpRequest, db: Session = Depends(get_db)):
-    """Validates email availability and dispatches 6-digit verification OTP."""
-    rate_limiter.check(request, "signup_otp", max_requests=5, window_seconds=300, identifier=payload.email)
+    """Validates email availability, enforces database-backed abuse limits, and dispatches 6-digit verification OTP."""
+    rate_limiter.check_otp_abuse(request, payload.email, db=db)
 
     email_lower = payload.email.lower()
     existing = db.query(User).filter(User.email == email_lower).first()
     if existing:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="An account with this email address already exists. Please sign in.",
+            detail="An account with this email address already exists. Please log in.",
         )
 
     # Clean existing pending signup OTPs for this email
@@ -320,7 +331,15 @@ def request_signup_otp(request: Request, payload: SignupOtpRequest, db: Session 
     db.add(record)
     db.commit()
 
-    send_otp_email(to_email=email_lower, otp=otp, purpose_label="Verify Your Workspace Account")
+    dispatch_res = send_otp_email(to_email=email_lower, otp=otp, purpose_label="Verify Your Workspace Account", db=db)
+    if not dispatch_res.get("success"):
+        # Roll back pending OTP state so retry works cleanly and zero half-created state remains
+        db.delete(record)
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="We could not send the code, please try again soon.",
+        )
 
     return {
         "status": "success",
@@ -337,7 +356,7 @@ def verify_signup_otp(
     db: Session = Depends(get_db),
 ):
     """Verifies OTP, confirms password match, creates verified user workspace, and returns tokens."""
-    rate_limiter.check(request, "verify_signup_otp", max_requests=10, window_seconds=300, identifier=payload.email)
+    rate_limiter.check(request, "verify_signup_otp", max_requests=10, window_seconds=300, identifier=payload.email, db=db)
 
     if payload.password != payload.confirm_password:
         raise HTTPException(
@@ -367,7 +386,7 @@ def verify_signup_otp(
     if existing:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="An account with this email address already exists. Please sign in.",
+            detail="An account with this email address already exists. Please log in.",
         )
 
     # Create verified user account
@@ -377,6 +396,7 @@ def verify_signup_otp(
         sender_name=payload.name.strip() if payload.name else None,
         timezone=payload.timezone or "UTC",
         is_email_verified=True,
+        token_version=1,
     )
     db.add(user)
     db.flush()
@@ -393,8 +413,15 @@ def verify_signup_otp(
     db.commit()
     db.refresh(user)
 
-    access_token = create_access_token(str(user.id), user.email, settings.TICK_SECRET)
-    refresh_token = create_refresh_token(str(user.id), settings.TICK_SECRET)
+    # Send Welcome Email
+    try:
+        send_welcome_email(to_email=user.email, user_name=user.sender_name)
+    except Exception as e:
+        logger.warning("Failed to dispatch welcome email: %s", e)
+
+    user_ver = getattr(user, "token_version", 1) or 1
+    access_token = create_access_token(str(user.id), user.email, settings.TICK_SECRET, token_version=user_ver)
+    refresh_token = create_refresh_token(str(user.id), settings.TICK_SECRET, token_version=user_ver)
     set_refresh_cookie(response, refresh_token)
 
     return TokenResponse(
@@ -407,8 +434,8 @@ def verify_signup_otp(
 
 @router.post("/forgot-password-otp")
 def request_forgot_password_otp(request: Request, payload: ForgotPasswordOtpRequest, db: Session = Depends(get_db)):
-    """Dispatches a 6-digit password reset OTP to the registered email."""
-    rate_limiter.check(request, "forgot_password_otp", max_requests=5, window_seconds=300, identifier=payload.email)
+    """Dispatches a 6-digit password reset OTP to the registered email with abuse limits."""
+    rate_limiter.check_otp_abuse(request, payload.email, db=db)
 
     email_lower = payload.email.lower()
     user = db.query(User).filter(User.email == email_lower, User.is_active == True).first()
@@ -429,7 +456,14 @@ def request_forgot_password_otp(request: Request, payload: ForgotPasswordOtpRequ
         db.add(record)
         db.commit()
 
-        send_otp_email(to_email=email_lower, otp=otp, purpose_label="Reset Your Password")
+        dispatch_res = send_otp_email(to_email=email_lower, otp=otp, purpose_label="Reset Your Password", db=db)
+        if not dispatch_res.get("success"):
+            db.delete(record)
+            db.commit()
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="We could not send the code, please try again soon.",
+            )
 
     return {
         "status": "success",
@@ -472,10 +506,16 @@ def reset_password_with_otp(payload: ResetPasswordOtpRequest, db: Session = Depe
         )
 
     user.password_hash = hash_password(payload.new_password)
+    user.token_version = (getattr(user, "token_version", 1) or 1) + 1
     user.reset_token_hash = None
     user.reset_token_expires_at = None
     db.delete(otp_record)
     db.commit()
+
+    try:
+        send_password_changed_email(to_email=user.email, user_name=user.sender_name)
+    except Exception as e:
+        pass
 
     return {
         "status": "success",
@@ -484,8 +524,13 @@ def reset_password_with_otp(payload: ResetPasswordOtpRequest, db: Session = Depe
 
 
 @router.post("/change-password-otp")
-def request_change_password_otp(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Authenticated user requests an OTP to change their workspace password."""
+def request_change_password_otp(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Authenticated user requests an OTP to change their workspace password with abuse limits."""
+    rate_limiter.check_otp_abuse(request, current_user.email, db=db)
     email_lower = current_user.email.lower()
     db.query(EmailOTP).filter(EmailOTP.email == email_lower, EmailOTP.purpose == "change_password").delete()
 
@@ -502,7 +547,14 @@ def request_change_password_otp(current_user: User = Depends(get_current_user), 
     db.add(record)
     db.commit()
 
-    send_otp_email(to_email=email_lower, otp=otp, purpose_label="Confirm Password Update")
+    dispatch_res = send_otp_email(to_email=email_lower, otp=otp, purpose_label="Confirm Password Update", db=db)
+    if not dispatch_res.get("success"):
+        db.delete(record)
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="We could not send the code, please try again soon.",
+        )
 
     return {
         "status": "success",
@@ -547,8 +599,14 @@ def confirm_change_password(
         )
 
     current_user.password_hash = hash_password(payload.new_password)
+    current_user.token_version = (getattr(current_user, "token_version", 1) or 1) + 1
     db.delete(otp_record)
     db.commit()
+
+    try:
+        send_password_changed_email(to_email=current_user.email, user_name=current_user.sender_name)
+    except Exception as e:
+        pass
 
     return {
         "status": "success",
@@ -557,8 +615,13 @@ def confirm_change_password(
 
 
 @router.post("/delete-account-otp")
-def request_delete_account_otp(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Dispatches a high-priority 6-digit verification code to delete workspace."""
+def request_delete_account_otp(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Dispatches a high-priority 6-digit verification code to delete workspace with abuse limits."""
+    rate_limiter.check_otp_abuse(request, current_user.email, db=db)
     email_lower = current_user.email.lower()
     db.query(EmailOTP).filter(EmailOTP.email == email_lower, EmailOTP.purpose == "delete_account").delete()
 
@@ -575,7 +638,14 @@ def request_delete_account_otp(current_user: User = Depends(get_current_user), d
     db.add(record)
     db.commit()
 
-    send_otp_email(to_email=email_lower, otp=otp, purpose_label="Permanently Delete Workspace")
+    dispatch_res = send_otp_email(to_email=email_lower, otp=otp, purpose_label="Permanently Delete Workspace", db=db)
+    if not dispatch_res.get("success"):
+        db.delete(record)
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="We could not send the code, please try again soon.",
+        )
 
     return {
         "status": "success",
@@ -624,10 +694,27 @@ def confirm_delete_account(
             detail="Invalid or expired deletion code.",
         )
 
-    # Cascading delete of all tenant data
+    # 1. Clean up Cloudinary assets
+    try:
+        user_attachments = db.query(Attachment).filter(Attachment.user_id == current_user.id).all()
+        for att in user_attachments:
+            try:
+                delete_attachment(att.cloudinary_public_id, att.content_type)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    # 2. Cascading delete of all tenant data
     db.delete(otp_record)
     db.delete(current_user)
     db.commit()
+
+    # 3. Send Account Deleted Confirmation Email
+    try:
+        send_account_deleted_email(to_email=email_lower)
+    except Exception:
+        pass
 
     response.delete_cookie(
         key="mailorbit_refresh",
@@ -641,7 +728,6 @@ def confirm_delete_account(
         "status": "success",
         "message": "Your workspace, profile, campaigns, and contacts have been permanently erased.",
     }
-
 
 
 @router.post("/logout")
@@ -685,8 +771,20 @@ def refresh_token(
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
 
-    new_access = create_access_token(str(user.id), user.email, settings.TICK_SECRET)
-    new_refresh = create_refresh_token(str(user.id), settings.TICK_SECRET)
+    user_ver = getattr(user, "token_version", 1) or 1
+    token_version = decoded.get("token_version", 1)
+    if token_version != user_ver:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh session has expired or was revoked")
+
+    new_access = create_access_token(str(user.id), user.email, settings.TICK_SECRET, token_version=user_ver)
+    new_refresh = create_refresh_token(str(user.id), settings.TICK_SECRET, token_version=user_ver)
+    set_refresh_cookie(response, new_refresh)
+
+    return TokenResponse(
+        access_token=new_access,
+        refresh_token=new_refresh,
+        user=to_user_out(user),
+    )
     set_refresh_cookie(response, new_refresh)
 
     return TokenResponse(

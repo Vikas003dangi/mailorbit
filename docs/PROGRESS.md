@@ -1,18 +1,18 @@
 # MailOrbit Progress Tracker
 
 **Document Purpose:** Living operational status record. Continuously updated after every milestone and step.
-**Last Updated:** 2026-10-30 09:45:00 +0530
+**Last Updated:** 2026-10-30 12:35:00 +0530
 **Active Branch:** `main`
-**Live Commit (/api/v1/health):** `eedc9e7`
+**Live Commit (/api/v1/health):** `eedc9e7` (Awaiting push of M1 completion)
 
 ---
 
 ## 1. Current State & Immediate Focus
 
 - **Current Milestone:** `M1: Production Works: Database, Accounts, System Mail`
-- **Current Step:** Preparing Step M1.1 (Alembic revisions covering all current models, comparing with Neon production schema, startup auto-upgrade, and CI check) & Step M1.2 (System relay script + docs).
-- **Active Human Gate:** `GATE M1` (Waiting on owner: Neon branch snapshot, system Gmail & Apps Script deployment, environment variables).
-- **Blockers:** None for local development of M1.1 through M1.6. Cannot deploy to Render past GATE M1 until owner completes Neon snapshot and system relay configuration.
+- **Current Step:** Local M1 verification complete (Alembic `3df3d63f3b76` applied to Neon, system mailer DB-backed quotas/floor, OTP rate limits, Next.js build export, 78/78 pytest passed). Deploying M1 to Render.
+- **Active Human Gate:** `GATE M1` (PASSED by owner: Neon snapshot `backup-pre-m1`, system relay on `mailorbit.support@gmail.com`, Render env vars saved).
+- **Blockers:** None.
 
 ---
 
@@ -20,7 +20,7 @@
 
 | Milestone | Title | Status | Gate Status | Completion |
 | :--- | :--- | :---: | :---: | :---: |
-| **M1** | Production Works: Database, Accounts, System Mail | IN-PROGRESS | GATE M1 PENDING OWNER | 20% |
+| **M1** | Production Works: Database, Accounts, System Mail | IN-PROGRESS | GATE M1 PASSED | 95% |
 | **M2** | Security and Authorization (N14, N15, J-series) | QUEUED | Ready after M1 | 0% |
 | **M3** | Real Relay Proof (H1, H2, H3, M2, E4) | QUEUED | GATE M3 (Owner Relay & Key) | 0% |
 | **M4** | Campaign Engine, Live (P1-P7, D, G, H4-H6, H8, I1, I2, I4) | QUEUED | GATE M4 (Mid-batch restart) | 0% |
@@ -36,19 +36,14 @@
 | Timestamp (+0530) | Step / Action | Commit Hash | Evidence / Verification |
 | :--- | :--- | :---: | :--- |
 | **2026-10-30 08:05:19** | Initial OTP, Theme Switcher, Account Settings & Sticky Sidebar | `eedc9e7` | 78 pytest tests passing; `/api/v1/health` verified live on Render. |
-| **2026-10-30 09:45:00** | Initialized `docs/MASTER_BUILD_BRIEF.md` and `docs/PROGRESS.md` | Pending | Brief stored verbatim per owner directive. |
+| **2026-10-30 09:45:00** | Initialized `docs/MASTER_BUILD_BRIEF.md` and `docs/PROGRESS.md` | `ccf793e` | Brief stored verbatim per owner directive. |
+| **2026-10-30 12:35:00** | M1: DB-backed system mailer, OTP abuse limits, floor reservations, Next.js static build export | Pending Push | 78 pytest tests green (Python 3.11.9), ruff clean, alembic check clean. |
 
 ---
 
 ## 4. Pending Human Gates
 
-### GATE M1 (Owner Action Required before live deploy of M1)
-1. **Neon Snapshot:** In Neon Console (`shy-thunder-30665519`), create a branch snapshot `backup-pre-m1` of the `main` branch.
-2. **Platform System Gmail & Relay:**
-   - Create dedicated platform Gmail account (e.g. `mailorbit.system@gmail.com`).
-   - Enable 2-Step Verification and deploy `scripts/mailorbit_system_relay.js` as Web App.
-   - Set Script Property: `RELAY_AUTH_TOKEN`.
-3. **Render Environment Variables:**
-   - Set `SYSTEM_RELAY_URL` = `<Web App URL>`
-   - Set `SYSTEM_RELAY_TOKEN` = `<Token>`
-   - Verify `ADMIN_EMAILS` = `["vikassdangi@gmail.com"]`
+### GATE M1 (COMPLETED)
+1. **Neon Snapshot:** Created branch snapshot `backup-pre-m1` on `shy-thunder-30665519`.
+2. **Platform System Gmail & Relay:** Deployed on `mailorbit.support@gmail.com` with `RELAY_AUTH_TOKEN`.
+3. **Render Environment Variables:** Configured `SYSTEM_RELAY_URL`, `SYSTEM_RELAY_TOKEN`, `ADMIN_EMAILS="vikassdangi@gmail.com,vd19055@gmail.com"` along with rotated DB & secret keys.

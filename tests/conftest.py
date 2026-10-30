@@ -10,6 +10,8 @@ if not os.environ.get("TICK_SECRET"):
     os.environ["TICK_SECRET"] = "pytest-mock-tick-secret-9999"
 if not os.environ.get("ADMIN_EMAILS"):
     os.environ["ADMIN_EMAILS"] = '["admin@test.local"]'
+if not os.environ.get("DATABASE_URL") or any(bad in os.environ.get("DATABASE_URL", "") for bad in ("neon.tech", "aws", "rds", "pooler")):
+    os.environ["DATABASE_URL"] = "sqlite:///./test_mailorbit.db"
 
 from apps.api.config import settings
 from apps.api.services.rate_limiter import rate_limiter
@@ -51,6 +53,7 @@ def guard_against_production_database():
     from packages.shared.schema import Base
     import apps.api.dependencies
     from sqlalchemy import text
+    Base.metadata.drop_all(bind=apps.api.dependencies.engine)
     Base.metadata.create_all(bind=apps.api.dependencies.engine)
     with apps.api.dependencies.engine.begin() as conn:
         conn.execute(text("CREATE TABLE IF NOT EXISTS alembic_version (version_num VARCHAR(32) NOT NULL)"))

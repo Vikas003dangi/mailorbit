@@ -87,6 +87,7 @@ class User(Base):
     reset_token_hash = Column(String(255), nullable=True)
     reset_token_expires_at = Column(DateTime(timezone=True), nullable=True)
     sender_name = Column(String(255), nullable=True)
+    token_version = Column(Integer, default=1, nullable=False)
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
 
@@ -358,5 +359,39 @@ class EmailOTP(Base):
     expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
     attempts = Column(Integer, default=0, nullable=False)
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+
+class RateLimitRecord(Base):
+    """
+    Database-backed rate limit and lockout tracker.
+    Persists across deploys and container recycles.
+    """
+    __tablename__ = "rate_limits"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    key = Column(String(255), nullable=False, unique=True, index=True)
+    attempts = Column(Integer, default=1, nullable=False)
+    window_start = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    locked_until = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
+
+
+class SystemMailLog(Base):
+    """
+    Database-backed audit trail and quota telemetry for platform transactional emails.
+    Tracks sent counts, dropped low-priority notifications, and relay-reported remaining capacity.
+    """
+    __tablename__ = "system_mail_logs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    recipient = Column(String(255), nullable=False, index=True)
+    event_type = Column(String(50), nullable=False, index=True)
+    priority = Column(String(20), nullable=False, default="LOW")
+    status = Column(String(50), nullable=False, index=True)  # SENT, DROPPED_NEAR_CAP, QUOTA_EXCEEDED, COOLDOWN_ACTIVE, FAILED
+    relay_reported_remaining = Column(Integer, nullable=True)
+    detail = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False, index=True)
+
 
 

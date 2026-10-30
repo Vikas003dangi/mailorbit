@@ -30,6 +30,7 @@ def create_access_token(
     user_id: str,
     email: str,
     secret_key: str,
+    token_version: int = 1,
     expires_delta: Optional[timedelta] = None,
 ) -> str:
     """Creates a signed, short-lived JWT access token for API requests."""
@@ -39,6 +40,7 @@ def create_access_token(
         "sub": user_id,
         "email": email,
         "type": "access",
+        "token_version": token_version,
         "iat": int(now.timestamp()),
         "exp": int(expire.timestamp()),
     }
@@ -48,6 +50,7 @@ def create_access_token(
 def create_refresh_token(
     user_id: str,
     secret_key: str,
+    token_version: int = 1,
     expires_delta: Optional[timedelta] = None,
 ) -> str:
     """Creates a longer-lived JWT refresh token."""
@@ -56,6 +59,7 @@ def create_refresh_token(
     payload = {
         "sub": user_id,
         "type": "refresh",
+        "token_version": token_version,
         "iat": int(now.timestamp()),
         "exp": int(expire.timestamp()),
     }

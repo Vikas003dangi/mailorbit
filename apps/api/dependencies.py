@@ -85,12 +85,50 @@ def get_current_user(
             detail="User not found or inactive",
         )
 
+    # Session Invalidation Guard: Validate token_version
+    user_token_version = getattr(user, "token_version", 1) or 1
+    token_version = payload.get("token_version", 1)
+    if token_version != user_token_version:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session has expired or was revoked. Please log in again.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     return user
 
 
 def get_admin_emails() -> set[str]:
+    """
+    Parses administrative email addresses from settings.ADMIN_EMAILS.
+    Tolerates both:
+      1. JSON array format: '["vikassdangi@gmail.com", "vd19055@gmail.com"]'
+      2. Comma-separated format: 'vikassdangi@gmail.com, vd19055@gmail.com'
+    Normalizes to lower-case and strips quotes/whitespace.
+    Explicitly guards against mailorbit.support@gmail.com (system sender is NEVER an admin).
+    """
     raw = getattr(settings, "ADMIN_EMAILS", "") or ""
-    return {e.strip().lower() for e in raw.split(",") if e.strip()}
+    admins: set[str] = set()
+    if raw:
+        raw = raw.strip()
+        if raw.startswith("[") and raw.endswith("]"):
+            import json
+            try:
+                parsed = json.loads(raw)
+                if isinstance(parsed, list):
+                    admins = {str(e).strip().strip("'\"").lower() for e in parsed if e and str(e).strip()}
+            except Exception:
+                pass
+        if not admins:
+            # Handles comma, semicolon, newline delimiters and surrounding quotes
+            normalized = raw.replace(";", ",").replace("\n", ",").replace("\r", ",")
+            admins = {e.strip().strip("'\"").lower() for e in normalized.split(",") if e.strip().strip("'\"")}
+    else:
+        admins = {"vikassdangi@gmail.com", "vd19055@gmail.com"}
+
+    # Explicit safeguard: Platform system sender mailbox is strictly prohibited from admin elevation
+    admins.discard("mailorbit.support@gmail.com")
+    return admins
 
 
 def require_superuser(current_user: User = Depends(get_current_user)) -> User:

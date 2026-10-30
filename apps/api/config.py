@@ -43,6 +43,11 @@ class Settings(BaseSettings):
 
     ADMIN_EMAILS: str | None = None
     ADMIN_BOOTSTRAP_TOKEN: str | None = None
+
+    # Platform System Relay (Google Apps Script Web App for platform transactional mail)
+    SYSTEM_RELAY_URL: str | None = None
+    SYSTEM_RELAY_TOKEN: str | None = None
+
     BREVO_API_KEY: str | None = None
     BREVO_SENDER_EMAIL: str = "noreply@mailorbit.io"
 

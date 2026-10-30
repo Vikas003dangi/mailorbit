@@ -129,8 +129,28 @@ def test_change_and_delete_account_otp():
     })
     assert res_cp.status_code == 200
 
-    # 2. Request delete account OTP
-    res_del_otp = client.post("/api/v1/auth/delete-account-otp", headers=headers)
+    # Old token must now be rejected with 401 due to session invalidation on password change
+    old_token_res = client.post("/api/v1/auth/delete-account-otp", headers=headers)
+    assert old_token_res.status_code == 401
+
+    # Login with new password to get active session
+    res_relogin = client.post("/api/v1/auth/login", json={"email": test_email, "password": "BrandNewKey789!"})
+    assert res_relogin.status_code == 200
+    new_headers = {"Authorization": f"Bearer {res_relogin.json()['access_token']}"}
+
+    # Assert 60-second cooldown is strictly enforced on rapid repeat request
+    cooldown_blocked = client.post("/api/v1/auth/delete-account-otp", headers=new_headers)
+    assert cooldown_blocked.status_code == 429
+    assert "Please wait 60 seconds" in cooldown_blocked.json()["detail"]
+
+    # Clear cooldown record to simulate 60 seconds passing
+    from packages.shared.schema import RateLimitRecord
+    with SessionFactory() as db:
+        db.query(RateLimitRecord).filter(RateLimitRecord.key.like("%otp_cooldown%")).delete()
+        db.commit()
+
+    # 2. Request delete account OTP with active session after cooldown
+    res_del_otp = client.post("/api/v1/auth/delete-account-otp", headers=new_headers)
     assert res_del_otp.status_code == 200
 
     raw_del_otp = "990011"
@@ -141,7 +161,7 @@ def test_change_and_delete_account_otp():
         db.commit()
 
     # Attempt delete without "DELETE" keyword -> fails
-    res_del_fail = client.post("/api/v1/auth/confirm-delete-account", headers=headers, json={
+    res_del_fail = client.post("/api/v1/auth/confirm-delete-account", headers=new_headers, json={
         "password": "BrandNewKey789!",
         "confirmation_text": "no",
         "otp": raw_del_otp,
@@ -149,7 +169,7 @@ def test_change_and_delete_account_otp():
     assert res_del_fail.status_code == 400
 
     # Confirm delete with "DELETE"
-    res_del_ok = client.post("/api/v1/auth/confirm-delete-account", headers=headers, json={
+    res_del_ok = client.post("/api/v1/auth/confirm-delete-account", headers=new_headers, json={
         "password": "BrandNewKey789!",
         "confirmation_text": "DELETE",
         "otp": raw_del_otp,

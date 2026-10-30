@@ -34,9 +34,33 @@ from packages.shared.models import EgressReport, HealthResponse, TickResponse
 logging.basicConfig(level=getattr(logging, settings.LOG_LEVEL, logging.INFO))
 logger = logging.getLogger("mailorbit.api")
 
+def apply_alembic_migrations():
+    """Applies Alembic migrations up to head before serving traffic."""
+    try:
+        from alembic import command
+        from alembic.config import Config
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        alembic_ini = os.path.join(project_root, "alembic.ini")
+        if os.path.exists(alembic_ini):
+            logger.info("Applying database migrations up to head via Alembic...")
+            alembic_cfg = Config(alembic_ini)
+            alembic_cfg.set_main_option("script_location", os.path.join(project_root, "alembic"))
+            command.upgrade(alembic_cfg, "head")
+            logger.info("Alembic migrations successfully applied to head.")
+        else:
+            logger.warning("alembic.ini not found at %s; skipping auto-migration", alembic_ini)
+    except Exception as e:
+        logger.error("Failed to apply Alembic migrations on startup: %s", e)
+        if settings.ENVIRONMENT == "production":
+            raise e
+
+
 @asynccontextmanager
 async def lifespan(app_instance: FastAPI):
-    # Prime in-memory schedule cache on startup
+    # 1. Apply Alembic migrations up to head on startup before serving
+    apply_alembic_migrations()
+
+    # 2. Prime in-memory schedule cache on startup
     try:
         with session_factory() as session:
             schedule_cache.refresh_from_db(session)
@@ -121,9 +145,13 @@ def verify_tick_secret(
 def status_page(db: Session = Depends(get_db)):
     """System architecture and isolated status diagnostics page."""
     db_ok = False
+    alembic_version = "none"
     try:
         db.execute(text("SELECT 1"))
         db_ok = True
+        res = db.execute(text("SELECT version_num FROM alembic_version")).scalar()
+        if res:
+            alembic_version = str(res)
     except Exception:
         db_ok = False
 
@@ -155,6 +183,7 @@ def status_page(db: Session = Depends(get_db)):
       <li class="stack-item"><span class="stack-name">Unified Host Runtime</span><span class="stack-val">Render Web Service (Oregon)</span></li>
       <li class="stack-item"><span class="stack-name">Web Application</span><span class="stack-val">Mounted at root "/" (Next.js Static Export)</span></li>
       <li class="stack-item"><span class="stack-name">Relational Database</span><span class="stack-val">Neon PostgreSQL 16 (Ohio) - {'Connected' if db_ok else 'Degraded'}</span></li>
+      <li class="stack-item"><span class="stack-name">Alembic Migration Head</span><span class="stack-val">{alembic_version}</span></li>
       <li class="stack-item"><span class="stack-name">Outbound Egress Relay</span><span class="stack-val">Google Apps Script HTTPS:443 (10% Safety Pause)</span></li>
       <li class="stack-item"><span class="stack-name">Watchdog Scheduler</span><span class="stack-val">cron-job.org /tick (Header-only auth, 10m active 06:00-24:00 IST)</span></li>
       <li class="stack-item"><span class="stack-name">Keepalive Monitor</span><span class="stack-val">Disabled (UptimeRobot paused; compute sleeps 00:00-06:00 IST)</span></li>
