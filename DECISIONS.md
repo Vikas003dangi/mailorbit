@@ -66,4 +66,42 @@ Users navigating MailOrbit across its various workspaces (Sender Relay & Keys, L
      - Tested cold email outreach template
      - Gemini 1.5 Flash structured prompting template
 
+---
+
+## 2026-10-30: Master Architecture & Foundation Decisions (Milestone 1–8)
+
+### Context
+Consolidation of core operational policies and architectural constraints following the comprehensive system audit.
+
+### Decisions
+1. **System Mail Architecture**:
+   - Platform-owned Google Apps Script relay on a dedicated MailOrbit Gmail account (`SYSTEM_RELAY_URL`, `SYSTEM_RELAY_TOKEN`).
+   - Brevo API and direct SMTP are completely removed from the production system mail path (Render blocks egress port 587; Brevo with a Gmail sender fails SPF/DKIM alignment checks).
+   - Local SMTP (Mailpit) is permitted strictly in development (`ENVIRONMENT=development`).
+   - Platform-wide sending cap of 90 system emails per rolling 24 hours with resend cooldowns and zero auto-verification bypasses.
+
+2. **Database Schema & Migrations**:
+   - Alembic is the single source of truth for database migrations.
+   - The application automatically executes `alembic upgrade head` at startup in `main.py` before serving requests.
+   - CI enforces `alembic check` to prevent model-migration drift.
+   - Zero manual SQL against production; no write access through external DB tools.
+   - Neon branch snapshots required prior to migrations.
+
+3. **Administration & Telemetry**:
+   - Configured via a single environment variable: `ADMIN_EMAILS` (legacy `SUPERUSER_EMAILS` deprecated and removed).
+   - Requires verified email address.
+   - Admin deck displays aggregate system counts and health only; never exposes user contacts, email bodies, or uploaded resumes.
+
+4. **Branding & Visuals**:
+   - `OrbitalLogo` is designated as a placeholder until explicit user design approval. Requirement `L1` remains `NOT-VERIFIED`.
+
+5. **Runtime Constraints**:
+   - Free tier only: Python 3.11.9 runtime pinned locally and on Render.
+   - Zero Redis/Celery dependencies; PostgreSQL row-level locks (`FOR UPDATE SKIP LOCKED`) provide job queue leasing.
+
+6. **Account Enumeration & Signup UX**:
+   - Duplicate signup explicitly displays "An account already exists, log in".
+   - Account enumeration risks are mitigated by strict per-IP (5/hour) and per-email rate limits recorded in the database.
+
+
 

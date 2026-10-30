@@ -943,3 +943,4 @@ export default function AuthCard({
     </div>
   );
 }
+
