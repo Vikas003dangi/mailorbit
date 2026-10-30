@@ -75,6 +75,18 @@ def test_signup_login_lifecycle():
     assert logout_res.json()["status"] == "success"
 
 
+def test_direct_signup_disabled_in_production(monkeypatch):
+    """Guarantees unverified direct signup is strictly prohibited in production mode."""
+    from apps.api.config import settings
+    monkeypatch.setattr(settings, "ENVIRONMENT", "production")
+    res = client.post(
+        "/api/v1/auth/signup",
+        json={"email": "prod.signup.test@example.com", "password": "SecurePassword123!"},
+    )
+    assert res.status_code == 403
+    assert "Direct unverified registration is disabled in production" in res.json()["detail"]
+
+
 def test_forgot_password_and_reset_flow():
     email = f"reset_{uuid.uuid4().hex[:8]}@example.com"
     pwd = "OriginalPassword123!"

@@ -150,6 +150,11 @@ def set_refresh_cookie(response: Response, refresh_token: str) -> None:
 @router.post("/signup", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 def signup(request: Request, payload: SignupRequest, response: Response, db: Session = Depends(get_db)):
     """Registers a new user workspace, creates verification token, and returns auth tokens."""
+    if getattr(settings, "ENVIRONMENT", "").lower() == "production":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Direct unverified registration is disabled in production. Use the verification code flow via /signup-otp.",
+        )
     rate_limiter.check(request, "signup", max_requests=5, window_seconds=3600, db=db)
 
     existing = db.query(User).filter(User.email == payload.email.lower()).first()
@@ -814,8 +819,16 @@ def bootstrap_admin(
     """
     One-time bootstrap endpoint to safely elevate an account whose email is in ADMIN_EMAILS
     to verified status when system transactional email is offline.
-    Permanently records token consumption in the database so it can NEVER be reused across restarts.
+    Permanently disabled unless ADMIN_BOOTSTRAP_TOKEN environment variable is explicitly configured.
     """
+    # 0. Feature Disabled Guard
+    expected_token = getattr(settings, "ADMIN_BOOTSTRAP_TOKEN", None)
+    if not expected_token or not expected_token.strip():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid or expired admin bootstrap token (endpoint is disabled)",
+        )
+
     # 1. Caller Authorization Check (must be in ADMIN_EMAILS)
     admin_set = get_admin_emails()
     if not current_user.email or current_user.email.lower() not in admin_set:
@@ -825,8 +838,7 @@ def bootstrap_admin(
         )
 
     # 2. Token Matching Check
-    expected_token = getattr(settings, "ADMIN_BOOTSTRAP_TOKEN", None)
-    if not expected_token or not secrets.compare_digest(payload.bootstrap_token.strip(), expected_token.strip()):
+    if not secrets.compare_digest(payload.bootstrap_token.strip(), expected_token.strip()):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Invalid or expired admin bootstrap token",
