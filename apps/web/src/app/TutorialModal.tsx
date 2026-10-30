@@ -384,11 +384,11 @@ export default function TutorialModal({ initialTab = "relay", onClose }: Tutoria
         <div
           style={{
             display: "flex",
+            flexWrap: "wrap",
             gap: "8px",
             padding: "12px 24px",
             background: "#080e1e",
             borderBottom: "1px solid #1e293b",
-            overflowX: "auto",
           }}
         >
           <button

@@ -343,3 +343,20 @@ class ContactReplacement(Base):
 
     user = relationship("User", back_populates="replacements")
 
+
+class EmailOTP(Base):
+    """
+    Cryptographically secure single-use OTP codes for email verification,
+    password reset, password update, and account deletion.
+    """
+    __tablename__ = "email_otps"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    email = Column(String(255), nullable=False, index=True)
+    otp_hash = Column(String(64), nullable=False, index=True)
+    purpose = Column(String(50), nullable=False, index=True)  # signup, forgot_password, change_password, delete_account
+    expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    attempts = Column(Integer, default=0, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+

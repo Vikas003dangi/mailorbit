@@ -44,6 +44,10 @@ import {
   ArrowRightLeft,
   Menu,
   X,
+  Eye,
+  EyeOff,
+  Sun,
+  Moon,
 } from "lucide-react";
 import TutorialModal, { TutorialTab } from "./TutorialModal";
 import HighLimitWarningModal from "./components/HighLimitWarningModal";
@@ -52,6 +56,8 @@ import QuarantineSection from "./components/QuarantineSection";
 import AiCopilotSection from "./components/AiCopilotSection";
 import DocumentLibrary from "./components/DocumentLibrary";
 import DirectPasteModal from "./components/DirectPasteModal";
+import AuthCard from "./components/AuthCard";
+import AccountSettingsSection from "./components/AccountSettingsSection";
 
 const DEFAULT_API_URL = "";
 
@@ -59,8 +65,9 @@ const DEFAULT_API_URL = "";
 const SUPERUSER_EMAILS = ["vikassdangi@gmail.com", "vd19055@gmail.com"];
 
 // Orbital Logo Component - Sleek futuristic celestial engine
-function OrbitalLogo({ size = 40 }: { size?: number }) {
+function OrbitalLogo({ size = 40, theme = "dark" }: { size?: number; theme?: "dark" | "light" }) {
   const gradientId = useId();
+  const isLight = theme === "light";
   return (
     <div style={{ display: "flex", alignItems: "center", gap: "12px", cursor: "pointer" }}>
       <div style={{ position: "relative", width: size, height: size, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -129,7 +136,7 @@ function OrbitalLogo({ size = 40 }: { size?: number }) {
 
       <div>
         <div style={{ display: "flex", alignItems: "baseline", gap: "2px" }}>
-          <span style={{ fontSize: "1.42rem", fontWeight: 900, letterSpacing: "-0.04em", color: "#ffffff" }}>
+          <span style={{ fontSize: "1.42rem", fontWeight: 900, letterSpacing: "-0.04em", color: isLight ? "#0f172a" : "#ffffff" }}>
             Mail
           </span>
           <span
@@ -224,6 +231,32 @@ export default function MailOrbitDashboard() {
   const [token, setToken] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [isDemoMode, setIsDemoMode] = useState(false);
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
+
+  useEffect(() => {
+    try {
+      const savedTheme = localStorage.getItem("mailorbit_theme") as "dark" | "light" | null;
+      if (savedTheme === "dark" || savedTheme === "light") {
+        setTheme(savedTheme);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const toggleTheme = () => {
+    setTheme((prev) => {
+      const next = prev === "dark" ? "light" : "dark";
+      try {
+        localStorage.setItem("mailorbit_theme", next);
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  };
+
+  const isLight = theme === "light";
 
   // Active Navigation Tab
   const [activeTab, setActiveTab] = useState<
@@ -1185,7 +1218,7 @@ export default function MailOrbitDashboard() {
   });
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: "#0b0f19", color: "#f8fafc", fontFamily: "system-ui, -apple-system, sans-serif" }}>
+    <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: isLight ? "#f8fafc" : "#0b0f19", color: isLight ? "#0f172a" : "#f8fafc", fontFamily: "system-ui, -apple-system, sans-serif" }}>
       {/* Top Universal Brand Header */}
       <header
         style={{
@@ -1193,8 +1226,8 @@ export default function MailOrbitDashboard() {
           justifyContent: "space-between",
           alignItems: "center",
           padding: "10px 20px",
-          background: "#0f172a",
-          borderBottom: "1px solid #1e293b",
+          background: isLight ? "#ffffff" : "#0f172a",
+          borderBottom: `1px solid ${isLight ? "#e2e8f0" : "#1e293b"}`,
           position: "sticky",
           top: 0,
           zIndex: 40,
@@ -1207,9 +1240,9 @@ export default function MailOrbitDashboard() {
             className="show-on-mobile"
             aria-label="Toggle navigation menu"
             style={{
-              background: "#1e293b",
-              border: "1px solid #334155",
-              color: "#e2e8f0",
+              background: isLight ? "#f1f5f9" : "#1e293b",
+              border: `1px solid ${isLight ? "#cbd5e1" : "#334155"}`,
+              color: isLight ? "#0f172a" : "#e2e8f0",
               padding: "6px 9px",
               borderRadius: "6px",
               cursor: "pointer",
@@ -1217,9 +1250,9 @@ export default function MailOrbitDashboard() {
               justifyContent: "center",
             }}
           >
-            {mobileMenuOpen ? <X size={18} color="#38bdf8" /> : <Menu size={18} color="#e2e8f0" />}
+            {mobileMenuOpen ? <X size={18} color="#38bdf8" /> : <Menu size={18} color={isLight ? "#0f172a" : "#e2e8f0"} />}
           </button>
-          <OrbitalLogo size={36} />
+          <OrbitalLogo size={36} theme={theme} />
           {isDemoMode && (
             <div
               className="hide-on-mobile"
@@ -1295,6 +1328,29 @@ export default function MailOrbitDashboard() {
             <Code2 size={14} color="#38bdf8" />
             <span className="hide-on-mobile">Creator & Portfolio</span>
             <span className="show-on-mobile" style={{ fontSize: "0.75rem" }}>Creator</span>
+          </button>
+
+          {/* Visual Theme Toggle */}
+          <button
+            onClick={toggleTheme}
+            title={`Switch to ${isLight ? "Dark" : "Light"} Mode`}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              background: isLight ? "#f1f5f9" : "#1e293b",
+              color: isLight ? "#0f172a" : "#94a3b8",
+              border: `1px solid ${isLight ? "#cbd5e1" : "#334155"}`,
+              padding: "6px 12px",
+              borderRadius: "6px",
+              fontSize: "0.82rem",
+              fontWeight: 600,
+              cursor: "pointer",
+              transition: "all 0.15s ease",
+            }}
+          >
+            {isLight ? <Moon size={14} color="#6366f1" /> : <Sun size={14} color="#f59e0b" />}
+            <span className="hide-on-mobile">{isLight ? "Dark" : "Light"}</span>
           </button>
 
           {!token && !isDemoMode ? (
@@ -1425,12 +1481,17 @@ export default function MailOrbitDashboard() {
           className={`app-sidebar ${mobileMenuOpen ? "sidebar-open" : ""}`}
           style={{
             width: "240px",
-            background: "#0d1322",
-            borderRight: "1px solid #1e293b",
+            background: isLight ? "#ffffff" : "#0d1322",
+            borderRight: `1px solid ${isLight ? "#e2e8f0" : "#1e293b"}`,
             padding: "20px 14px",
             display: "flex",
             flexDirection: "column",
             justifyContent: "space-between",
+            position: "sticky",
+            top: "57px",
+            height: "calc(100vh - 57px)",
+            overflowY: "auto",
+            flexShrink: 0,
           }}
         >
           <div>
@@ -1652,20 +1713,20 @@ export default function MailOrbitDashboard() {
           </div>
 
           {/* Quick Footer Links */}
-          <div style={{ padding: "10px", background: "#0b101d", borderRadius: "8px", border: "1px solid #1e293b" }}>
-            <div style={{ fontSize: "0.72rem", color: "#64748b", marginBottom: "6px" }}>BUILT BY</div>
-            <div style={{ fontWeight: 600, fontSize: "0.84rem", color: "#e2e8f0" }}>Vikas Dangi</div>
+          <div style={{ padding: "10px", background: isLight ? "#f1f5f9" : "#0b101d", borderRadius: "8px", border: `1px solid ${isLight ? "#e2e8f0" : "#1e293b"}` }}>
+            <div style={{ fontSize: "0.72rem", color: isLight ? "#64748b" : "#64748b", marginBottom: "6px" }}>BUILT BY</div>
+            <div style={{ fontWeight: 600, fontSize: "0.84rem", color: isLight ? "#0f172a" : "#e2e8f0" }}>Vikas Dangi</div>
             <div style={{ fontSize: "0.72rem", color: "#38bdf8" }}>Generative AI & Full-Stack</div>
             <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
-              <a href="https://github.com/Vikas003dangi" target="_blank" rel="noreferrer" style={{ color: "#94a3b8" }}>
+              <a href="https://github.com/Vikas003dangi" target="_blank" rel="noreferrer" style={{ color: isLight ? "#64748b" : "#94a3b8" }}>
                 <Github size={14} />
               </a>
-              <a href="https://linkedin.com/in/vikas-dangi-dev" target="_blank" rel="noreferrer" style={{ color: "#94a3b8" }}>
+              <a href="https://linkedin.com/in/vikas-dangi-dev" target="_blank" rel="noreferrer" style={{ color: isLight ? "#64748b" : "#94a3b8" }}>
                 <Linkedin size={14} />
               </a>
             </div>
-            <div style={{ marginTop: "10px", paddingTop: "8px", borderTop: "1px solid #1e293b" }}>
-              <a href="/status" target="_blank" rel="noreferrer" style={{ fontSize: "0.72rem", color: "#64748b", textDecoration: "none", display: "flex", alignItems: "center", gap: "4px" }}>
+            <div style={{ marginTop: "10px", paddingTop: "8px", borderTop: `1px solid ${isLight ? "#e2e8f0" : "#1e293b"}` }}>
+              <a href="/status" target="_blank" rel="noreferrer" style={{ fontSize: "0.72rem", color: isLight ? "#64748b" : "#64748b", textDecoration: "none", display: "flex", alignItems: "center", gap: "4px" }}>
                 <span>System Status</span>
                 <ExternalLink size={10} />
               </a>
@@ -1714,226 +1775,23 @@ export default function MailOrbitDashboard() {
 
           {/* If Not Logged In and not in Demo Mode (and not viewing About tab), Display Auth Card */}
           {!token && !isDemoMode && activeTab !== "about" ? (
-            <div style={{ maxWidth: "440px", margin: "40px auto", background: "#111827", padding: "36px", borderRadius: "14px", border: "1px solid #1f2937", boxShadow: "0 10px 30px rgba(0,0,0,0.5)" }}>
-              <div style={{ textAlign: "center", marginBottom: "26px" }}>
-                <div style={{ display: "flex", justifyContent: "center", marginBottom: "12px" }}>
-                  <OrbitalLogo size={48} />
-                </div>
-                <h2 style={{ fontSize: "1.45rem", fontWeight: 700, margin: "8px 0 4px" }}>
-                  {authMode === "login" ? "Welcome Back to MailOrbit" : "Create Your Free Workspace"}
-                </h2>
-                <p style={{ color: "#94a3b8", fontSize: "0.85rem", margin: 0 }}>
-                  Autonomous cold-email engine with smart batch pacing & BYOK AI.
-                </p>
-              </div>
-
-              {/* Login / Sign Up Tabs */}
-              <div style={{ display: "flex", borderBottom: "1px solid #1f2937", marginBottom: "20px" }}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAuthMode("login");
-                    setAuthError(null);
-                    setAuthStatusText(null);
-                  }}
-                  style={{
-                    flex: 1,
-                    padding: "10px",
-                    background: "transparent",
-                    border: "none",
-                    borderBottom: authMode === "login" ? "2px solid #38bdf8" : "none",
-                    color: authMode === "login" ? "#38bdf8" : "#9ca3af",
-                    fontWeight: 600,
-                    cursor: "pointer",
-                  }}
-                >
-                  Log In
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAuthMode("signup");
-                    setAuthError(null);
-                    setAuthStatusText(null);
-                  }}
-                  style={{
-                    flex: 1,
-                    padding: "10px",
-                    background: "transparent",
-                    border: "none",
-                    borderBottom: authMode === "signup" ? "2px solid #38bdf8" : "none",
-                    color: authMode === "signup" ? "#38bdf8" : "#9ca3af",
-                    fontWeight: 600,
-                    cursor: "pointer",
-                  }}
-                >
-                  Sign Up
-                </button>
-              </div>
-
-              {/* Email Verification Unavailable Notice on Signup */}
-              {authMode === "signup" && (
-                <div
-                  style={{
-                    background: "rgba(234, 179, 8, 0.12)",
-                    border: "1px solid #ca8a04",
-                    color: "#fde047",
-                    padding: "10px 14px",
-                    borderRadius: "8px",
-                    marginBottom: "16px",
-                    fontSize: "0.82rem",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "10px",
-                  }}
-                >
-                  <AlertCircle size={16} color="#eab308" style={{ flexShrink: 0 }} />
-                  <span>Email verification is temporarily unavailable. Account created in unverified mode with limited access.</span>
-                </div>
-              )}
-
-              {/* Honest Wake-up / Retry Status Alert */}
-              {authStatusText && (
-                <div
-                  style={{
-                    background: "rgba(56, 189, 248, 0.12)",
-                    border: "1px solid #0284c7",
-                    color: "#7dd3fc",
-                    padding: "12px 14px",
-                    borderRadius: "8px",
-                    marginBottom: "16px",
-                    fontSize: "0.84rem",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "10px",
-                  }}
-                >
-                  <RefreshCw size={16} className="animate-spin" color="#38bdf8" />
-                  <span>{authStatusText}</span>
-                </div>
-              )}
-
-              {/* Error Alert Box */}
-              {authError && (
-                <div
-                  style={{
-                    background: "rgba(239, 68, 68, 0.15)",
-                    border: "1px solid #ef4444",
-                    color: "#fca5a5",
-                    padding: "12px 14px",
-                    borderRadius: "8px",
-                    marginBottom: "16px",
-                    fontSize: "0.84rem",
-                    display: "flex",
-                    alignItems: "flex-start",
-                    gap: "8px",
-                  }}
-                >
-                  <AlertCircle size={16} color="#ef4444" style={{ flexShrink: 0, marginTop: "2px" }} />
-                  <div>{authError}</div>
-                </div>
-              )}
-
-              {/* Auth Form */}
-              <form onSubmit={handleAuth} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-                <div>
-                  <label style={{ display: "block", fontSize: "0.82rem", color: "#9ca3af", marginBottom: "6px" }}>
-                    Email Address
-                  </label>
-                  <input
-                    type="email"
-                    required
-                    value={authEmail}
-                    onChange={(e) => setAuthEmail(e.target.value)}
-                    placeholder="you@company.com"
-                    style={{
-                      width: "100%",
-                      padding: "11px 14px",
-                      borderRadius: "8px",
-                      background: "#1f2937",
-                      border: "1px solid #374151",
-                      color: "#ffffff",
-                      fontSize: "0.9rem",
-                      boxSizing: "border-box",
-                    }}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ display: "block", fontSize: "0.82rem", color: "#9ca3af", marginBottom: "6px" }}>
-                    Password
-                  </label>
-                  <input
-                    type="password"
-                    required
-                    minLength={8}
-                    value={authPassword}
-                    onChange={(e) => setAuthPassword(e.target.value)}
-                    placeholder="••••••••••••"
-                    style={{
-                      width: "100%",
-                      padding: "11px 14px",
-                      borderRadius: "8px",
-                      background: "#1f2937",
-                      border: "1px solid #374151",
-                      color: "#ffffff",
-                      fontSize: "0.9rem",
-                      boxSizing: "border-box",
-                    }}
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={authLoading}
-                  style={{
-                    background: authLoading ? "#0369a1" : "linear-gradient(135deg, #0284c7 0%, #2563eb 100%)",
-                    color: "#ffffff",
-                    border: "none",
-                    padding: "12px",
-                    borderRadius: "8px",
-                    fontWeight: 600,
-                    fontSize: "0.95rem",
-                    cursor: authLoading ? "not-allowed" : "pointer",
-                    display: "flex",
-                    justifyContent: "center",
-                    alignItems: "center",
-                    gap: "8px",
-                    marginTop: "8px",
-                  }}
-                >
-                  {authLoading && <RefreshCw size={16} className="animate-spin" />}
-                  {authLoading ? "Connecting..." : authMode === "login" ? "Sign In to Workspace" : "Create Workspace"}
-                </button>
-              </form>
-
-              {/* Instant Sandbox Button */}
-              <div style={{ marginTop: "24px", paddingTop: "20px", borderTop: "1px solid #1f2937", textAlign: "center" }}>
-                <p style={{ fontSize: "0.82rem", color: "#94a3b8", marginBottom: "12px" }}>
-                  Want to explore without creating an account?
-                </p>
-                <button
-                  onClick={enableDemoMode}
-                  style={{
-                    width: "100%",
-                    display: "flex",
-                    justifyContent: "center",
-                    alignItems: "center",
-                    gap: "8px",
-                    background: "#1e293b",
-                    color: "#38bdf8",
-                    border: "1px solid #0284c7",
-                    padding: "10px",
-                    borderRadius: "8px",
-                    fontWeight: 600,
-                    fontSize: "0.85rem",
-                    cursor: "pointer",
-                  }}
-                >
-                  <Zap size={14} color="#38bdf8" />
-                  ⚡ Launch Interactive Sandbox (Demo Mode)
-                </button>
-              </div>
+            <div style={{ display: "flex", justifyContent: "center", padding: "40px 16px" }}>
+              <AuthCard
+                apiUrl={apiUrl}
+                onAuthSuccess={(tok, usr) => {
+                  setToken(tok);
+                  setCurrentUser(usr);
+                  try {
+                    localStorage.setItem("token", tok);
+                  } catch {
+                    // ignore
+                  }
+                  setStatusMessage(`Welcome ${usr?.name || usr?.email || ""}! Workspace connected.`);
+                }}
+                onLaunchDemo={enableDemoMode}
+                theme={theme}
+                superuserEmails={SUPERUSER_EMAILS}
+              />
             </div>
           ) : (
             /* Authenticated or Demo Dashboard View */
@@ -2624,177 +2482,33 @@ export default function MailOrbitDashboard() {
 
               {/* Sender Relay, Resumes & Settings Tab */}
               {activeTab === "settings" && (
-                <div>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "24px", flexWrap: "wrap", gap: "16px" }}>
-                    <div>
-                      <h1 style={{ fontSize: "1.75rem", fontWeight: 700, margin: "0 0 6px" }}>Sender Relay, Resumes & Profile</h1>
-                      <p style={{ color: "#94a3b8", fontSize: "0.92rem", margin: 0 }}>
-                        Configure your zero-password Google Apps Script egress relay, upload resumes to Cloudinary, and manage daily sending limits.
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => openTutorial("relay")}
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "8px",
-                        background: "rgba(56, 189, 248, 0.12)",
-                        border: "1px solid #0284c7",
-                        color: "#38bdf8",
-                        padding: "9px 16px",
-                        borderRadius: "8px",
-                        fontWeight: 600,
-                        fontSize: "0.85rem",
-                        cursor: "pointer",
-                        transition: "all 0.2s ease",
-                      }}
-                    >
-                      <BookOpen size={16} />
-                      📘 How to Setup Relay & Flowchart
-                    </button>
-                  </div>
-
-                  {/* Daily Limit Slider Card with >30 Warning Guard */}
-                  <div style={{ background: "#111827", padding: "20px 24px", borderRadius: "12px", border: "1px solid #1f2937", marginBottom: "24px" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                      <div>
-                        <h3 style={{ margin: "0 0 4px", fontSize: "1.05rem", fontWeight: 600 }}>Daily Sending Cap (Single Sender)</h3>
-                        <p style={{ margin: 0, fontSize: "0.82rem", color: "#9ca3af" }}>
-                          Total combined emails sent per day across all active campaigns and sub-batches.
-                        </p>
-                      </div>
-                      <span style={{ fontSize: "1.1rem", fontWeight: 800, color: dailyCap <= 30 ? "#38bdf8" : "#fbbf24", background: "rgba(15, 23, 42, 0.8)", padding: "4px 12px", borderRadius: "6px", border: "1px solid #334155" }}>
-                        {dailyCap} emails / day
-                      </span>
-                    </div>
-
-                    <div style={{ marginTop: "12px", marginBottom: "8px" }}>
-                      <input
-                        type="range"
-                        min={5}
-                        max={100}
-                        step={5}
-                        value={dailyCap}
-                        onChange={(e) => handleCapSliderChange(parseInt(e.target.value))}
-                        style={{ width: "100%", cursor: "pointer", accentColor: dailyCap <= 30 ? "#38bdf8" : "#f59e0b" }}
-                      />
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", color: "#64748b", marginTop: "4px" }}>
-                        <span>5/day (Ultra Safe)</span>
-                        <span style={{ color: "#38bdf8", fontWeight: 700 }}>30/day (Recommended Default)</span>
-                        <span style={{ color: "#f59e0b" }}>100/day (High Risk)</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* High Cap Modal */}
-                  <HighLimitWarningModal
-                    isOpen={showHighCapModal}
-                    limit={pendingCapValue}
-                    onConfirm={confirmHighDailyCap}
-                    onCancel={() => setShowHighCapModal(false)}
-                  />
-
-                  {/* Document Library (Cloudinary Resumes) */}
-                  <DocumentLibrary
-                    attachments={attachments}
-                    onUpload={handleUploadResume}
-                    onDelete={handleDeleteResume}
-                    uploading={uploadingResume}
-                  />
-
-                  {/* Google Apps Script Relay Card */}
-                  <div style={{ background: "#111827", padding: "24px", borderRadius: "12px", border: "1px solid #1f2937", marginBottom: "26px" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-                      <h3 style={{ margin: 0, fontSize: "1.1rem" }}>Google Apps Script Web App Relay</h3>
-                      <button
-                        type="button"
-                        onClick={() => openTutorial("relay")}
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "6px",
-                          background: "#1e293b",
-                          border: "1px solid #0284c7",
-                          color: "#38bdf8",
-                          padding: "5px 12px",
-                          borderRadius: "6px",
-                          fontSize: "0.78rem",
-                          fontWeight: 600,
-                          cursor: "pointer",
-                        }}
-                      >
-                        <BookOpen size={13} />
-                        Get Relay Script
-                      </button>
-                    </div>
-
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "rgba(56, 189, 248, 0.08)", border: "1px solid rgba(56, 189, 248, 0.25)", padding: "10px 14px", borderRadius: "8px", marginBottom: "18px" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.82rem", color: "#e0f2fe" }}>
-                        <Info size={16} color="#38bdf8" />
-                        <span>Requires a free Google Apps Script web app proxy.</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => openTutorial("relay")}
-                        style={{
-                          background: "#0284c7",
-                          color: "#ffffff",
-                          border: "none",
-                          padding: "5px 12px",
-                          borderRadius: "6px",
-                          fontSize: "0.78rem",
-                          fontWeight: 700,
-                          cursor: "pointer",
-                        }}
-                      >
-                        View Setup Guide
-                      </button>
-                    </div>
-                    <div style={{ marginBottom: "14px" }}>
-                      <label style={{ display: "block", fontSize: "0.82rem", color: "#9ca3af", marginBottom: "4px" }}>
-                        Sender Gmail Address
-                      </label>
-                      <input
-                        type="email"
-                        value={relayEmail}
-                        onChange={(e) => setRelayEmail(e.target.value)}
-                        placeholder="you@gmail.com"
-                        style={{ width: "100%", padding: "10px", borderRadius: "6px", background: "#1f2937", border: "1px solid #374151", color: "#ffffff", boxSizing: "border-box" }}
-                      />
-                    </div>
-                    <div style={{ marginBottom: "14px" }}>
-                      <label style={{ display: "block", fontSize: "0.82rem", color: "#9ca3af", marginBottom: "4px" }}>
-                        Apps Script Web App URL
-                      </label>
-                      <input
-                        type="url"
-                        value={relayScriptUrl}
-                        onChange={(e) => setRelayScriptUrl(e.target.value)}
-                        placeholder="https://script.google.com/macros/s/.../exec"
-                        style={{ width: "100%", padding: "10px", borderRadius: "6px", background: "#1f2937", border: "1px solid #374151", color: "#ffffff", boxSizing: "border-box" }}
-                      />
-                    </div>
-                    <div style={{ marginBottom: "18px" }}>
-                      <label style={{ display: "block", fontSize: "0.82rem", color: "#9ca3af", marginBottom: "4px" }}>
-                        Relay Secret Token
-                      </label>
-                      <input
-                        type="password"
-                        value={relayAuthToken}
-                        onChange={(e) => setRelayAuthToken(e.target.value)}
-                        placeholder="Secret defined in Apps Script properties"
-                        style={{ width: "100%", padding: "10px", borderRadius: "6px", background: "#1f2937", border: "1px solid #374151", color: "#ffffff", boxSizing: "border-box" }}
-                      />
-                    </div>
-                    <button
-                      onClick={handleSaveRelay}
-                      disabled={relaySaving}
-                      style={{ background: "#0284c7", color: "#ffffff", border: "none", padding: "10px 18px", borderRadius: "6px", cursor: "pointer", fontWeight: 600 }}
-                    >
-                      {relaySaving ? "Saving..." : "Connect Relay"}
-                    </button>
-                  </div>
-                </div>
+                <AccountSettingsSection
+                  currentUser={currentUser}
+                  token={token}
+                  apiUrl={apiUrl}
+                  theme={theme}
+                  onToggleTheme={toggleTheme}
+                  dailyCap={dailyCap}
+                  onUpdateDailyCap={async (cap) => {
+                    setDailyCap(cap);
+                    setStatusMessage(`Daily cap updated to ${cap} emails/day`);
+                  }}
+                  relayEmail={relayEmail}
+                  relayScriptUrl={relayScriptUrl}
+                  relayAuthToken={relayAuthToken}
+                  onChangeRelayEmail={setRelayEmail}
+                  onChangeRelayUrl={setRelayScriptUrl}
+                  onChangeRelayToken={setRelayAuthToken}
+                  onSaveRelay={handleSaveRelay}
+                  relaySaving={relaySaving}
+                  attachments={attachments}
+                  onUploadResume={handleUploadResume}
+                  onDeleteResume={handleDeleteResume}
+                  uploadingResume={uploadingResume}
+                  onLogout={handleLogout}
+                  onOpenTutorial={openTutorial}
+                  isDemoMode={isDemoMode}
+                />
               )}
 
               {/* Creator / About Vikas Dangi Tab */}

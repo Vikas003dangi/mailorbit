@@ -10,7 +10,11 @@ from sqlalchemy.orm import Session
 from apps.api.config import settings
 from apps.api.dependencies import get_admin_emails, get_current_user, get_db
 from apps.api.services.rate_limiter import rate_limiter
-from apps.api.services.system_mailer import send_password_reset_email, send_verification_email
+from apps.api.services.system_mailer import (
+    send_otp_email,
+    send_password_reset_email,
+    send_verification_email,
+)
 from packages.shared.auth import (
     create_access_token,
     create_refresh_token,
@@ -18,7 +22,7 @@ from packages.shared.auth import (
     hash_password,
     verify_password,
 )
-from packages.shared.schema import BootstrapRecord, Profile, User
+from packages.shared.schema import BootstrapRecord, EmailOTP, Profile, User
 
 router = APIRouter(prefix="/api/v1/auth", tags=["Authentication"])
 
@@ -58,7 +62,51 @@ class TokenResponse(BaseModel):
 class SignupRequest(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=8, description="Minimum 8 characters")
+    name: Optional[str] = None
     timezone: str = Field(default="UTC", description="User preferred time zone")
+
+
+class SignupOtpRequest(BaseModel):
+    email: EmailStr
+    name: Optional[str] = None
+
+
+class VerifySignupOtpRequest(BaseModel):
+    email: EmailStr
+    otp: str = Field(..., min_length=6, max_length=6)
+    password: str = Field(..., min_length=8, description="Minimum 8 characters")
+    confirm_password: str = Field(..., min_length=8, description="Confirm password")
+    name: Optional[str] = None
+    timezone: str = "UTC"
+
+
+class ForgotPasswordOtpRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordOtpRequest(BaseModel):
+    email: EmailStr
+    otp: str = Field(..., min_length=6, max_length=6)
+    new_password: str = Field(..., min_length=8)
+    confirm_password: str = Field(..., min_length=8)
+
+
+class ChangePasswordConfirmRequest(BaseModel):
+    current_password: str
+    new_password: str = Field(..., min_length=8)
+    confirm_password: str = Field(..., min_length=8)
+    otp: str = Field(..., min_length=6, max_length=6)
+
+
+class DeleteAccountConfirmRequest(BaseModel):
+    password: str
+    confirmation_text: str  # Must be "DELETE"
+    otp: str = Field(..., min_length=6, max_length=6)
+
+
+def generate_numeric_otp(length: int = 6) -> str:
+    return "".join(secrets.choice("0123456789") for _ in range(length))
+
 
 
 class LoginRequest(BaseModel):
@@ -236,6 +284,364 @@ def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db))
         "status": "success",
         "message": "Password has been reset successfully. You may now log in with your new password.",
     }
+
+
+# =========================================================================
+# Modern Single-Use 6-Digit OTP Flows (Signup, Reset, Change, Delete)
+# =========================================================================
+
+
+@router.post("/signup-otp")
+def request_signup_otp(request: Request, payload: SignupOtpRequest, db: Session = Depends(get_db)):
+    """Validates email availability and dispatches 6-digit verification OTP."""
+    rate_limiter.check(request, "signup_otp", max_requests=5, window_seconds=300, identifier=payload.email)
+
+    email_lower = payload.email.lower()
+    existing = db.query(User).filter(User.email == email_lower).first()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An account with this email address already exists. Please sign in.",
+        )
+
+    # Clean existing pending signup OTPs for this email
+    db.query(EmailOTP).filter(EmailOTP.email == email_lower, EmailOTP.purpose == "signup").delete()
+
+    otp = generate_numeric_otp(6)
+    otp_hash = hashlib.sha256(otp.encode()).hexdigest()
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+
+    record = EmailOTP(
+        email=email_lower,
+        otp_hash=otp_hash,
+        purpose="signup",
+        expires_at=expires_at,
+    )
+    db.add(record)
+    db.commit()
+
+    send_otp_email(to_email=email_lower, otp=otp, purpose_label="Verify Your Workspace Account")
+
+    return {
+        "status": "success",
+        "message": f"A 6-digit verification code has been dispatched to {email_lower}. Valid for 15 minutes.",
+        "email": email_lower,
+    }
+
+
+@router.post("/verify-signup-otp", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+def verify_signup_otp(
+    request: Request,
+    payload: VerifySignupOtpRequest,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    """Verifies OTP, confirms password match, creates verified user workspace, and returns tokens."""
+    rate_limiter.check(request, "verify_signup_otp", max_requests=10, window_seconds=300, identifier=payload.email)
+
+    if payload.password != payload.confirm_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Passwords do not match. Please re-enter.",
+        )
+
+    email_lower = payload.email.lower()
+    otp_hash = hashlib.sha256(payload.otp.strip().encode()).hexdigest()
+    now = datetime.now(timezone.utc)
+
+    otp_record = db.query(EmailOTP).filter(
+        EmailOTP.email == email_lower,
+        EmailOTP.otp_hash == otp_hash,
+        EmailOTP.purpose == "signup",
+        EmailOTP.expires_at > now,
+    ).first()
+
+    if not otp_record:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification code. Please request a new code.",
+        )
+
+    # Double check user doesn't already exist
+    existing = db.query(User).filter(User.email == email_lower).first()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An account with this email address already exists. Please sign in.",
+        )
+
+    # Create verified user account
+    user = User(
+        email=email_lower,
+        password_hash=hash_password(payload.password),
+        sender_name=payload.name.strip() if payload.name else None,
+        timezone=payload.timezone or "UTC",
+        is_email_verified=True,
+    )
+    db.add(user)
+    db.flush()
+
+    # Create profile with full_name
+    profile = Profile(
+        user_id=user.id,
+        full_name=payload.name.strip() if payload.name else None,
+    )
+    db.add(profile)
+
+    # Delete consumed OTP
+    db.delete(otp_record)
+    db.commit()
+    db.refresh(user)
+
+    access_token = create_access_token(str(user.id), user.email, settings.TICK_SECRET)
+    refresh_token = create_refresh_token(str(user.id), settings.TICK_SECRET)
+    set_refresh_cookie(response, refresh_token)
+
+    return TokenResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        user=to_user_out(user),
+        message="Workspace verified and created successfully!",
+    )
+
+
+@router.post("/forgot-password-otp")
+def request_forgot_password_otp(request: Request, payload: ForgotPasswordOtpRequest, db: Session = Depends(get_db)):
+    """Dispatches a 6-digit password reset OTP to the registered email."""
+    rate_limiter.check(request, "forgot_password_otp", max_requests=5, window_seconds=300, identifier=payload.email)
+
+    email_lower = payload.email.lower()
+    user = db.query(User).filter(User.email == email_lower, User.is_active == True).first()
+    if user:
+        # Clean prior reset OTPs
+        db.query(EmailOTP).filter(EmailOTP.email == email_lower, EmailOTP.purpose == "forgot_password").delete()
+
+        otp = generate_numeric_otp(6)
+        otp_hash = hashlib.sha256(otp.encode()).hexdigest()
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+
+        record = EmailOTP(
+            email=email_lower,
+            otp_hash=otp_hash,
+            purpose="forgot_password",
+            expires_at=expires_at,
+        )
+        db.add(record)
+        db.commit()
+
+        send_otp_email(to_email=email_lower, otp=otp, purpose_label="Reset Your Password")
+
+    return {
+        "status": "success",
+        "message": f"If an active account exists for {email_lower}, a 6-digit reset code has been sent.",
+        "email": email_lower,
+    }
+
+
+@router.post("/reset-password-otp")
+def reset_password_with_otp(payload: ResetPasswordOtpRequest, db: Session = Depends(get_db)):
+    """Resets password after verifying the 6-digit OTP."""
+    if payload.new_password != payload.confirm_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password and confirmation do not match.",
+        )
+
+    email_lower = payload.email.lower()
+    otp_hash = hashlib.sha256(payload.otp.strip().encode()).hexdigest()
+    now = datetime.now(timezone.utc)
+
+    otp_record = db.query(EmailOTP).filter(
+        EmailOTP.email == email_lower,
+        EmailOTP.otp_hash == otp_hash,
+        EmailOTP.purpose == "forgot_password",
+        EmailOTP.expires_at > now,
+    ).first()
+
+    if not otp_record:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired reset code. Please request a new code.",
+        )
+
+    user = db.query(User).filter(User.email == email_lower, User.is_active == True).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User account not found.",
+        )
+
+    user.password_hash = hash_password(payload.new_password)
+    user.reset_token_hash = None
+    user.reset_token_expires_at = None
+    db.delete(otp_record)
+    db.commit()
+
+    return {
+        "status": "success",
+        "message": "Password updated successfully! You may now sign in with your new password.",
+    }
+
+
+@router.post("/change-password-otp")
+def request_change_password_otp(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Authenticated user requests an OTP to change their workspace password."""
+    email_lower = current_user.email.lower()
+    db.query(EmailOTP).filter(EmailOTP.email == email_lower, EmailOTP.purpose == "change_password").delete()
+
+    otp = generate_numeric_otp(6)
+    otp_hash = hashlib.sha256(otp.encode()).hexdigest()
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+
+    record = EmailOTP(
+        email=email_lower,
+        otp_hash=otp_hash,
+        purpose="change_password",
+        expires_at=expires_at,
+    )
+    db.add(record)
+    db.commit()
+
+    send_otp_email(to_email=email_lower, otp=otp, purpose_label="Confirm Password Update")
+
+    return {
+        "status": "success",
+        "message": f"A 6-digit confirmation code has been sent to {email_lower}.",
+    }
+
+
+@router.post("/confirm-change-password")
+def confirm_change_password(
+    payload: ChangePasswordConfirmRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Confirms current password, matching new passwords, and 6-digit OTP to update password."""
+    if not verify_password(payload.current_password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect.",
+        )
+
+    if payload.new_password != payload.confirm_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password and confirm password do not match.",
+        )
+
+    email_lower = current_user.email.lower()
+    otp_hash = hashlib.sha256(payload.otp.strip().encode()).hexdigest()
+    now = datetime.now(timezone.utc)
+
+    otp_record = db.query(EmailOTP).filter(
+        EmailOTP.email == email_lower,
+        EmailOTP.otp_hash == otp_hash,
+        EmailOTP.purpose == "change_password",
+        EmailOTP.expires_at > now,
+    ).first()
+
+    if not otp_record:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired confirmation code.",
+        )
+
+    current_user.password_hash = hash_password(payload.new_password)
+    db.delete(otp_record)
+    db.commit()
+
+    return {
+        "status": "success",
+        "message": "Password updated successfully.",
+    }
+
+
+@router.post("/delete-account-otp")
+def request_delete_account_otp(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Dispatches a high-priority 6-digit verification code to delete workspace."""
+    email_lower = current_user.email.lower()
+    db.query(EmailOTP).filter(EmailOTP.email == email_lower, EmailOTP.purpose == "delete_account").delete()
+
+    otp = generate_numeric_otp(6)
+    otp_hash = hashlib.sha256(otp.encode()).hexdigest()
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+
+    record = EmailOTP(
+        email=email_lower,
+        otp_hash=otp_hash,
+        purpose="delete_account",
+        expires_at=expires_at,
+    )
+    db.add(record)
+    db.commit()
+
+    send_otp_email(to_email=email_lower, otp=otp, purpose_label="Permanently Delete Workspace")
+
+    return {
+        "status": "success",
+        "message": f"A deletion confirmation code has been dispatched to {email_lower}.",
+    }
+
+
+@router.post("/confirm-delete-account")
+def confirm_delete_account(
+    payload: DeleteAccountConfirmRequest,
+    response: Response,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Permanently erases user account and cascades all associated data
+    (campaigns, batches, contacts, relays, files, keys).
+    Requires OTP, correct password, and typing 'DELETE'.
+    """
+    if payload.confirmation_text.strip().upper() != "DELETE":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Please type DELETE in the confirmation box.",
+        )
+
+    if not verify_password(payload.password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Incorrect password.",
+        )
+
+    email_lower = current_user.email.lower()
+    otp_hash = hashlib.sha256(payload.otp.strip().encode()).hexdigest()
+    now = datetime.now(timezone.utc)
+
+    otp_record = db.query(EmailOTP).filter(
+        EmailOTP.email == email_lower,
+        EmailOTP.otp_hash == otp_hash,
+        EmailOTP.purpose == "delete_account",
+        EmailOTP.expires_at > now,
+    ).first()
+
+    if not otp_record:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired deletion code.",
+        )
+
+    # Cascading delete of all tenant data
+    db.delete(otp_record)
+    db.delete(current_user)
+    db.commit()
+
+    response.delete_cookie(
+        key="mailorbit_refresh",
+        path="/api/v1/auth",
+        httponly=True,
+        samesite="lax",
+        secure=True,
+    )
+
+    return {
+        "status": "success",
+        "message": "Your workspace, profile, campaigns, and contacts have been permanently erased.",
+    }
+
 
 
 @router.post("/logout")

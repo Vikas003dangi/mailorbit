@@ -46,6 +46,12 @@ class Settings(BaseSettings):
     BREVO_API_KEY: str | None = None
     BREVO_SENDER_EMAIL: str = "noreply@mailorbit.io"
 
+    SYSTEM_SMTP_HOST: str | None = None
+    SYSTEM_SMTP_PORT: int = 587
+    SYSTEM_SMTP_USER: str | None = None
+    SYSTEM_SMTP_PASSWORD: str | None = None
+    SYSTEM_SMTP_FROM: str | None = None
+
     CLOUDINARY_CLOUD_NAME: str | None = None
     CLOUDINARY_API_KEY: str | None = None
     CLOUDINARY_API_SECRET: str | None = None
